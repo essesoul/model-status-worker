@@ -1,0 +1,19 @@
+{
+  "name": "model-status-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Pages + Worker + D1 implementation inspired by WizisCool/model-status",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:web": "npm run dev --workspace @model-status/web",
+    "dev:worker": "npm run dev --workspace @model-status/worker",
+    "deploy:cloudflare": "node ./scripts/deploy-cloudflare.mjs"
+  }
+}
