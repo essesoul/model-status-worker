@@ -1,5 +1,9 @@
 # Model Status Edge
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/essesoul/model-status-worker)
+
+> Quick import for Cloudflare. Cloudflare's official Deploy to Cloudflare button currently targets Workers apps; for the full `Pages + Worker + D1` flow in this repo, prefer `npm run deploy:cloudflare`.
+
 参考 [WizisCool/model-status](https://github.com/WizisCool/model-status) 思路重做的 Cloudflare 原生版本：
 
 - 前端部署到 Cloudflare Pages
