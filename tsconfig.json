@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": [
       "ES2022",
@@ -10,6 +10,11 @@
     ]
   },
   "include": [
-    "src/**/*.ts"
+    "src/index.ts",
+    "src/auth.ts",
+    "src/dashboard.ts",
+    "src/jobs.ts",
+    "src/store.ts",
+    "src/shared.ts"
   ]
 }

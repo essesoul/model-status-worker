@@ -2,18 +2,31 @@
   "name": "model-status-worker",
   "version": "0.1.0",
   "private": true,
-  "description": "Cloudflare Pages + Worker + D1 implementation inspired by WizisCool/model-status",
+  "description": "Single-Worker Cloudflare deployment inspired by WizisCool/model-status",
   "license": "MIT",
   "type": "module",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "dev:web": "npm run dev --workspace @model-status/web",
-    "dev:worker": "npm run dev --workspace @model-status/worker",
-    "deploy:cloudflare": "node ./scripts/deploy-cloudflare.mjs"
+    "dev": "node ./ensure-dev-vars.mjs && npm run build:web && wrangler dev -c wrangler.template.jsonc --local",
+    "build": "npm run build:web && npm run build:worker",
+    "build:web": "tsc --noEmit -p tsconfig.web.json && vite build",
+    "build:worker": "wrangler deploy -c wrangler.template.jsonc --dry-run --outdir worker-dist --name model-status-worker-dry-run",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.web.json",
+    "migrate:local": "wrangler d1 migrations apply DB --local -c wrangler.template.jsonc",
+    "deploy:cloudflare": "node ./deploy-cloudflare.mjs"
+  },
+  "dependencies": {
+    "hono": "^4.10.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260320.0",
+    "@types/node": "^24.12.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.1",
+    "wrangler": "^4.79.0"
   }
 }

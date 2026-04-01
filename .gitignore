@@ -1,5 +1,6 @@
 node_modules/
 dist/
+worker-dist/
 coverage/
 .wrangler/
 .DS_Store
@@ -11,7 +12,5 @@ Thumbs.db
 .dev.vars
 *.tsbuildinfo
 npm-debug.log*
-apps/web/dist/
-apps/worker/.wrangler/
-apps/worker/wrangler.jsonc
-apps/worker/.deploy-secrets.env
+wrangler.jsonc
+.deploy-secrets.env

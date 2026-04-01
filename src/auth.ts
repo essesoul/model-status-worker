@@ -105,13 +105,24 @@ function constantTimeEqual(left: string, right: string): boolean {
   return mismatch === 0;
 }
 
-function cookieAttributes(request: Request): string {
-  const origin = request.headers.get("Origin") ?? "";
-  if (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1")) {
-    return "Path=/; HttpOnly; SameSite=Lax; Max-Age=43200";
-  }
+function requestOrigin(request: Request): string | null {
+  return request.headers.get("Origin");
+}
 
-  return "Path=/; HttpOnly; Secure; SameSite=None; Max-Age=43200";
+function deploymentOrigin(request: Request): string {
+  return new URL(request.url).origin;
+}
+
+function needsCrossSiteSessionCookie(request: Request): boolean {
+  const origin = requestOrigin(request);
+  return Boolean(origin && origin !== deploymentOrigin(request));
+}
+
+function cookieAttributes(request: Request): string {
+  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+  const sameSite = needsCrossSiteSessionCookie(request) ? "None" : "Lax";
+
+  return `Path=/; HttpOnly${secure}; SameSite=${sameSite}; Max-Age=43200`;
 }
 
 export async function createSessionCookie(request: Request, username: string, secret: string): Promise<string> {
@@ -152,9 +163,9 @@ export function isValidLogin(username: string, password: string, expectedUsernam
   return constantTimeEqual(username.trim(), expectedUsername) && constantTimeEqual(password, expectedPassword);
 }
 
-export function getAllowedOrigins(appOrigin: string, extraAllowedOrigins: string | undefined): string[] {
+export function getAllowedOrigins(appOrigin: string | undefined, extraAllowedOrigins: string | undefined): string[] {
   return [
-    appOrigin,
+    ...(appOrigin ? [appOrigin] : []),
     ...((extraAllowedOrigins ?? "")
       .split(",")
       .map((value) => value.trim())
@@ -164,10 +175,19 @@ export function getAllowedOrigins(appOrigin: string, extraAllowedOrigins: string
   ];
 }
 
-export function isAllowedAdminOrigin(request: Request, appOrigin: string, extraAllowedOrigins?: string): boolean {
-  const origin = request.headers.get("Origin");
+export function getCorsAdminOrigin(request: Request): string | null {
+  const origin = requestOrigin(request);
   if (!origin) {
-    return false;
+    return null;
+  }
+
+  return origin === deploymentOrigin(request) ? null : origin;
+}
+
+export function isAllowedAdminOrigin(request: Request, appOrigin?: string, extraAllowedOrigins?: string): boolean {
+  const origin = getCorsAdminOrigin(request);
+  if (!origin) {
+    return true;
   }
 
   return getAllowedOrigins(appOrigin, extraAllowedOrigins).includes(origin);

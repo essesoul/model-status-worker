@@ -134,6 +134,47 @@ export type AdminActionResponse = {
   detail?: Record<string, unknown>;
 };
 
+export type ProbeStreamEvent =
+  | {
+      type: "cycle-started";
+      startedAt: string;
+      total: number;
+    }
+  | {
+      type: "attempt-started";
+      startedAt: string;
+      upstreamId: string;
+      upstreamName: string;
+      model: string;
+      attempt: number;
+    }
+  | {
+      type: "attempt-finished";
+      finishedAt: string;
+      upstreamId: string;
+      upstreamName: string;
+      model: string;
+      attempt: number;
+      result: {
+        success: boolean;
+        statusCode: number | null;
+        error: string | null;
+        connectivityLatencyMs: number | null;
+        firstTokenLatencyMs: number | null;
+        totalLatencyMs: number;
+      };
+      score: number;
+      classification: Exclude<ProbeLevel, "empty">;
+    }
+  | {
+      type: "cycle-finished";
+      startedAt: string;
+      finishedAt: string;
+      total: number;
+      succeeded: number;
+      failed: number;
+    };
+
 export type AdminSessionResponse = {
   authenticated: boolean;
   username: string | null;

@@ -3,7 +3,7 @@ import type {
   AdminSettingsResponse,
   ProbeAttemptResult,
   UpstreamInput,
-} from "@model-status/shared";
+} from "./shared";
 
 export type UpstreamRecord = {
   id: string;
@@ -119,7 +119,7 @@ type ProbeRow = {
 };
 
 const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
-  siteTitle: "Model Status Edge",
+  siteTitle: "Model Status worker",
   siteSubtitle: "Cloudflare-native status board for OpenAI-compatible model APIs",
   showSummaryCards: true,
   probeIntervalMs: 5 * 60_000,
@@ -295,21 +295,16 @@ export async function upsertUpstream(db: D1Database, upstream: UpstreamRecord): 
     .run();
 }
 
-export async function deactivateMissingUpstreams(
-  db: D1Database,
-  activeUpstreamIds: string[],
-  updatedAt: string,
-): Promise<void> {
-  if (activeUpstreamIds.length === 0) {
-    await db.prepare("UPDATE upstreams SET is_active = 0, updated_at = ?").bind(updatedAt).run();
+export async function deleteUpstreamsByIds(db: D1Database, upstreamIds: string[]): Promise<void> {
+  if (upstreamIds.length === 0) {
     return;
   }
 
-  const placeholders = activeUpstreamIds.map(() => "?").join(", ");
-  await db
-    .prepare(`UPDATE upstreams SET is_active = 0, updated_at = ? WHERE id NOT IN (${placeholders})`)
-    .bind(updatedAt, ...activeUpstreamIds)
-    .run();
+  const placeholders = upstreamIds.map(() => "?").join(", ");
+
+  await db.prepare(`DELETE FROM probes WHERE upstream_id IN (${placeholders})`).bind(...upstreamIds).run();
+  await db.prepare(`DELETE FROM models WHERE upstream_id IN (${placeholders})`).bind(...upstreamIds).run();
+  await db.prepare(`DELETE FROM upstreams WHERE id IN (${placeholders})`).bind(...upstreamIds).run();
 }
 
 export async function listModels(db: D1Database, activeOnly = false): Promise<ModelRecord[]> {
@@ -378,6 +373,27 @@ export async function updateModelMetadata(
       model.id,
     )
     .run();
+}
+
+export async function deleteModelsByKeys(
+  db: D1Database,
+  modelKeys: Array<{ upstreamId: string; id: string }>,
+): Promise<void> {
+  if (modelKeys.length === 0) {
+    return;
+  }
+
+  for (const model of modelKeys) {
+    await db
+      .prepare("DELETE FROM probes WHERE upstream_id = ? AND model = ?")
+      .bind(model.upstreamId, model.id)
+      .run();
+
+    await db
+      .prepare("DELETE FROM models WHERE upstream_id = ? AND id = ?")
+      .bind(model.upstreamId, model.id)
+      .run();
+  }
 }
 
 export async function deactivateMissingModels(
@@ -480,7 +496,7 @@ export async function ensureBootstrap(db: D1Database): Promise<void> {
   );
 
   const upstreams = await listUpstreams(db, false);
-  if (upstreams.length === 0) {
+  if (upstreams.length === 0 && Object.keys(settings).length === 0) {
     await upsertUpstream(db, {
       id: "default",
       name: "Default Upstream",
@@ -625,13 +641,13 @@ export async function updateAdminSettings(
 
   if (Array.isArray(updates.upstreams)) {
     const existingUpstreams = await listUpstreams(db, false);
-    const keepIds: string[] = [];
+    const keepIds = new Set<string>();
 
     let fallbackIndex = 1;
     for (const upstream of updates.upstreams) {
       const id = (upstream.id?.trim() || sanitizeUpstreamId(upstream.name, fallbackIndex)).toLowerCase();
       fallbackIndex += 1;
-      keepIds.push(id);
+      keepIds.add(id);
 
       const existing = existingUpstreams.find((candidate) => candidate.id === id);
       await upsertUpstream(db, {
@@ -648,7 +664,11 @@ export async function updateAdminSettings(
       });
     }
 
-    await deactivateMissingUpstreams(db, keepIds, nowIso);
+    const deleteIds = existingUpstreams
+      .map((upstream) => upstream.id)
+      .filter((id) => !keepIds.has(id));
+
+    await deleteUpstreamsByIds(db, deleteIds);
   }
 
   return getAdminSettingsResponse(db);

@@ -3,32 +3,36 @@ import type {
   AdminSessionResponse,
   DashboardRange,
   LoginRequest,
+  ProbeStreamEvent,
   UpdateAdminModelsRequest,
   UpdateAdminSettingsRequest,
-} from "@model-status/shared";
-import { isDashboardRange } from "@model-status/shared";
+} from "./shared";
+import { isDashboardRange } from "./shared";
 import { Hono } from "hono";
 
 import {
   clearSessionCookie,
   createSessionCookie,
+  getCorsAdminOrigin,
   getSession,
   isAllowedAdminOrigin,
   isValidLogin,
-} from "./lib/auth";
-import { getDashboardData } from "./lib/dashboard";
-import { probeAllModels, runDueJobs, syncModelCatalog } from "./lib/jobs";
+} from "./auth";
+import { getDashboardData } from "./dashboard";
+import { probeAllModels, runDueJobs, syncModelCatalog } from "./jobs";
 import {
+  deleteModelsByKeys,
   ensureBootstrap,
   getAdminSettingsResponse,
   getRuntimeSettings,
+  listModels,
   updateAdminSettings,
   updateModelMetadata,
-} from "./lib/store";
+} from "./store";
 
 type Bindings = {
   DB: D1Database;
-  APP_ORIGIN: string;
+  APP_ORIGIN?: string;
   EXTRA_ALLOWED_ORIGINS?: string;
   ADMIN_USERNAME?: string;
   ADMIN_PASSWORD: string;
@@ -43,6 +47,38 @@ function applyPublicCors(c: { header: (name: string, value: string) => void }) {
   c.header("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
 }
 
+function createSseResponse(
+  run: (send: (event: string, data: unknown) => Promise<void>) => Promise<void>,
+): Response {
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const encoder = new TextEncoder();
+
+      async function send(event: string, data: unknown) {
+        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      }
+
+      try {
+        await run(send);
+      } catch (error) {
+        await send("fatal", {
+          message: error instanceof Error ? error.message : "Internal probe stream error",
+        });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-store",
+      Connection: "keep-alive",
+    },
+  });
+}
+
 function applyAdminCors(
   c: {
     req: { raw: Request };
@@ -50,9 +86,13 @@ function applyAdminCors(
     header: (name: string, value: string) => void;
   },
 ): boolean {
-  const origin = c.req.raw.headers.get("Origin");
-  if (!origin || !isAllowedAdminOrigin(c.req.raw, c.env.APP_ORIGIN, c.env.EXTRA_ALLOWED_ORIGINS)) {
+  if (!isAllowedAdminOrigin(c.req.raw, c.env.APP_ORIGIN, c.env.EXTRA_ALLOWED_ORIGINS)) {
     return false;
+  }
+
+  const origin = getCorsAdminOrigin(c.req.raw);
+  if (!origin) {
+    return true;
   }
 
   c.header("Access-Control-Allow-Origin", origin);
@@ -196,7 +236,10 @@ app.put("/api/admin/models", async (c) => {
   }
 
   const payload = await c.req.json<UpdateAdminModelsRequest>();
+  const keepKeys = new Set<string>();
+
   for (const model of payload.models ?? []) {
+    keepKeys.add(`${model.upstreamId}::${model.id}`);
     await updateModelMetadata(c.env.DB, {
       upstreamId: model.upstreamId,
       id: model.id,
@@ -206,6 +249,16 @@ app.put("/api/admin/models", async (c) => {
       sortOrder: Math.max(0, Math.trunc(model.sortOrder ?? 0)),
     });
   }
+
+  const existingModels = await listModels(c.env.DB, true);
+  const deleteKeys = existingModels
+    .filter((model) => !keepKeys.has(`${model.upstreamId}::${model.id}`))
+    .map((model) => ({
+      upstreamId: model.upstreamId,
+      id: model.id,
+    }));
+
+  await deleteModelsByKeys(c.env.DB, deleteKeys);
 
   return c.json({
     ok: true,
@@ -241,6 +294,23 @@ app.post("/api/admin/actions/probe", async (c) => {
     message: result.total === 0 ? "No active models to probe" : "Probe cycle completed",
     detail: result,
   } satisfies AdminActionResponse);
+});
+
+app.post("/api/admin/actions/probe/stream", async (c) => {
+  const session = await requireAdmin(c);
+  if (session instanceof Response) {
+    return session;
+  }
+
+  return createSseResponse(async (send) => {
+    await send("ready", { ok: true });
+
+    const result = await probeAllModels(c.env.DB, async (event: ProbeStreamEvent) => {
+      await send("probe-event", event);
+    });
+
+    await send("done", result);
+  });
 });
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));

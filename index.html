@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/project-icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        var languages = [];
+        if (Array.isArray(navigator.languages)) {
+          languages = navigator.languages.slice();
+        }
+        if (navigator.language) {
+          languages.push(navigator.language);
+        }
+        var isChinese = languages.some(function (value) {
+          return typeof value === "string" && value.toLowerCase().indexOf("zh") === 0;
+        });
+        document.documentElement.lang = isChinese ? "zh-CN" : "en";
+        document.title = isChinese ? "模型状态" : "Model Status";
+      })();
+    </script>
+    <title>Model Status</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -4,8 +4,9 @@ import type {
   DashboardSummary,
   ModelSummary,
   ProbeStatusSample,
-} from "@model-status/shared";
-import { rangeStartIso } from "@model-status/shared";
+} from "./shared";
+import { scoreProbeLatency } from "./scoring";
+import { rangeStartIso } from "./shared";
 
 import {
   type ModelRecord,
@@ -40,40 +41,52 @@ function percentage(numerator: number, denominator: number): number {
 }
 
 function scoreProbe(
-  probe: Pick<ProbeRecord, "success" | "connectivityLatencyMs" | "totalLatencyMs">,
+  probe: Pick<ProbeRecord, "success" | "connectivityLatencyMs" | "firstTokenLatencyMs" | "totalLatencyMs">,
 ): number {
-  if (!probe.success) {
-    return 0;
-  }
-
-  const connectivityPenalty = Math.min(probe.connectivityLatencyMs ?? 1500, 1500) / 1500;
-  const totalPenalty = Math.min(probe.totalLatencyMs, 5000) / 5000;
-  const blendedPenalty = connectivityPenalty * 0.55 + totalPenalty * 0.45;
-
-  return Math.max(0, Math.round((1 - blendedPenalty) * 100));
+  return scoreProbeLatency(probe);
 }
 
 function isSuccessfulProbe(
-  probe: Pick<ProbeRecord, "success" | "connectivityLatencyMs" | "totalLatencyMs">,
-  settings: RuntimeSettings,
+  probe: Pick<ProbeRecord, "success">,
 ): boolean {
-  return scoreProbe(probe) >= settings.modelStatusUpScoreThreshold;
+  return probe.success;
 }
 
-function classifyBucket(score: number | null, settings: RuntimeSettings): ProbeStatusSample["level"] {
+function classifyProbeLevel(
+  probe: Pick<ProbeRecord, "success" | "connectivityLatencyMs" | "firstTokenLatencyMs" | "totalLatencyMs">,
+  settings: RuntimeSettings,
+): ProbeStatusSample["level"] {
+  if (!probe.success) {
+    return "down";
+  }
+
+  const score = scoreProbe(probe);
+  if (score >= settings.modelStatusUpScoreThreshold) {
+    return "up";
+  }
+
+  return "degraded";
+}
+
+function classifyBucket(
+  score: number | null,
+  probeCount: number,
+  successCount: number,
+  settings: RuntimeSettings,
+): ProbeStatusSample["level"] {
   if (score === null) {
     return "empty";
+  }
+
+  if (probeCount > 0 && successCount === 0) {
+    return "down";
   }
 
   if (score >= settings.modelStatusUpScoreThreshold) {
     return "up";
   }
 
-  if (score >= settings.modelStatusDegradedScoreThreshold) {
-    return "degraded";
-  }
-
-  return "down";
+  return "degraded";
 }
 
 function buildProbeSample(
@@ -87,9 +100,9 @@ function buildProbeSample(
     startedAt: probe.startedAt,
     endedAt: probe.completedAt,
     score,
-    level: classifyBucket(score, settings),
+    level: classifyProbeLevel(probe, settings),
     probeCount: 1,
-    successCount: isSuccessfulProbe(probe, settings) ? 1 : 0,
+    successCount: isSuccessfulProbe(probe) ? 1 : 0,
     avgConnectivityLatencyMs: probe.connectivityLatencyMs,
     avgTotalLatencyMs: probe.totalLatencyMs,
   };
@@ -159,6 +172,7 @@ function buildRecentStatuses(
     });
     const scores = bucketProbes.map(scoreProbe);
     const score = scores.length > 0 ? average(scores) : null;
+    const successCount = bucketProbes.filter((probe) => isSuccessfulProbe(probe)).length;
     const connectivity = bucketProbes
       .map((probe) => probe.connectivityLatencyMs)
       .filter((value): value is number => value !== null);
@@ -169,9 +183,9 @@ function buildRecentStatuses(
       startedAt: new Date(bucketStartMs).toISOString(),
       endedAt: new Date(bucketEndMs).toISOString(),
       score,
-      level: classifyBucket(score, settings),
+      level: classifyBucket(score, bucketProbes.length, successCount, settings),
       probeCount: bucketProbes.length,
-      successCount: bucketProbes.filter((probe) => isSuccessfulProbe(probe, settings)).length,
+      successCount,
       avgConnectivityLatencyMs: average(connectivity),
       avgTotalLatencyMs: average(total),
     };
@@ -187,7 +201,7 @@ function summarizeModel(
   toDate: Date,
   settings: RuntimeSettings,
 ): ModelSummary {
-  const successes = probes.filter((probe) => isSuccessfulProbe(probe, settings)).length;
+  const successes = probes.filter((probe) => isSuccessfulProbe(probe)).length;
   const failures = probes.length - successes;
   const connectivity = probes
     .map((probe) => probe.connectivityLatencyMs)

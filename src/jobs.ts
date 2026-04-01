@@ -1,4 +1,5 @@
-import type { ProbeAttemptResult } from "@model-status/shared";
+import type { ProbeAttemptResult, ProbeStreamEvent } from "./shared";
+import { scoreProbeLatency } from "./scoring";
 
 import {
   SETTING_KEYS,
@@ -34,6 +35,8 @@ type ProbeCycleResult = {
   succeeded: number;
   failed: number;
 };
+
+type ProbeReporter = (event: ProbeStreamEvent) => Promise<void> | void;
 
 function truncateText(value: string | undefined, maxLength = 4000): string | undefined {
   if (!value) {
@@ -290,39 +293,60 @@ async function runSingleProbe(
   };
 }
 
-function scoreResult(result: ProbeAttemptResult): number {
-  if (!result.success) {
-    return 0;
-  }
-
-  const connectivityPenalty = Math.min(result.connectivityLatencyMs ?? 1500, 1500) / 1500;
-  const totalPenalty = Math.min(result.totalLatencyMs, 5000) / 5000;
-  const blendedPenalty = connectivityPenalty * 0.55 + totalPenalty * 0.45;
-  return Math.max(0, Math.round((1 - blendedPenalty) * 100));
+function classifySuccessfulProbe(score: number, settings: RuntimeSettings): "up" | "degraded" {
+  return score >= settings.modelStatusUpScoreThreshold ? "up" : "degraded";
 }
 
 async function runProbeWithRetries(
   model: string,
   upstream: RuntimeSettings["upstreams"][number],
   settings: RuntimeSettings,
+  reporter?: ProbeReporter,
 ): Promise<ProbeAttemptResult> {
   let bestResult: ProbeAttemptResult | null = null;
   let bestScore = -1;
   let degradedRetriesLeft = Math.max(0, settings.degradedRetryAttempts);
   let failedRetriesLeft = Math.max(0, settings.failedRetryAttempts);
+  let attempt = 1;
 
   while (true) {
+    await reporter?.({
+      type: "attempt-started",
+      startedAt: new Date().toISOString(),
+      upstreamId: upstream.id,
+      upstreamName: upstream.name,
+      model,
+      attempt,
+    });
+
     const result = await runSingleProbe(model, upstream, settings);
-    const currentScore = scoreResult(result);
+    const currentScore = scoreProbeLatency(result);
     if (!bestResult || currentScore > bestScore) {
       bestResult = result;
       bestScore = currentScore;
     }
 
     const isHealthy = result.success && currentScore >= settings.modelStatusUpScoreThreshold;
-    const isDegraded = result.success
-      && currentScore >= settings.modelStatusDegradedScoreThreshold
-      && currentScore < settings.modelStatusUpScoreThreshold;
+    const isDegraded = result.success && currentScore < settings.modelStatusUpScoreThreshold;
+
+    await reporter?.({
+      type: "attempt-finished",
+      finishedAt: new Date().toISOString(),
+      upstreamId: upstream.id,
+      upstreamName: upstream.name,
+      model,
+      attempt,
+      result: {
+        success: result.success,
+        statusCode: result.statusCode ?? null,
+        error: result.error ?? null,
+        connectivityLatencyMs: result.connectivityLatencyMs ?? null,
+        firstTokenLatencyMs: result.firstTokenLatencyMs ?? null,
+        totalLatencyMs: result.totalLatencyMs,
+      },
+      score: currentScore,
+      classification: result.success ? classifySuccessfulProbe(currentScore, settings) : "down",
+    });
 
     if (isHealthy) {
       break;
@@ -330,11 +354,13 @@ async function runProbeWithRetries(
 
     if (isDegraded && degradedRetriesLeft > 0) {
       degradedRetriesLeft -= 1;
+      attempt += 1;
       continue;
     }
 
     if (!result.success && failedRetriesLeft > 0) {
       failedRetriesLeft -= 1;
+      attempt += 1;
       continue;
     }
 
@@ -447,7 +473,7 @@ export async function syncModelCatalog(db: D1Database): Promise<SyncResult> {
   };
 }
 
-export async function probeAllModels(db: D1Database): Promise<ProbeCycleResult> {
+export async function probeAllModels(db: D1Database, reporter?: ProbeReporter): Promise<ProbeCycleResult> {
   await ensureBootstrap(db);
   const settings = await getRuntimeSettings(db);
   const activeModels = (await listModels(db, true)).filter((model) =>
@@ -456,6 +482,11 @@ export async function probeAllModels(db: D1Database): Promise<ProbeCycleResult> 
   const startedAt = new Date().toISOString();
 
   await setSetting(db, SETTING_KEYS.lastProbeStartedAt, startedAt, startedAt);
+  await reporter?.({
+    type: "cycle-started",
+    startedAt,
+    total: activeModels.length,
+  });
 
   let succeeded = 0;
   let failed = 0;
@@ -468,7 +499,7 @@ export async function probeAllModels(db: D1Database): Promise<ProbeCycleResult> 
     .filter((task): task is { model: string; upstream: RuntimeSettings["upstreams"][number] } => Boolean(task.upstream));
 
   await runWithConcurrency(tasks, settings.probeConcurrency, async (task) => {
-    const result = await runProbeWithRetries(task.model, task.upstream, settings);
+    const result = await runProbeWithRetries(task.model, task.upstream, settings, reporter);
     await insertProbe(db, result);
     if (result.success) {
       succeeded += 1;
@@ -480,6 +511,15 @@ export async function probeAllModels(db: D1Database): Promise<ProbeCycleResult> 
   const finishedAt = new Date().toISOString();
   await setSetting(db, SETTING_KEYS.lastProbeAt, finishedAt, finishedAt);
   await setSetting(db, SETTING_KEYS.lastProbeFinishedAt, finishedAt, finishedAt);
+
+  await reporter?.({
+    type: "cycle-finished",
+    startedAt,
+    finishedAt,
+    total: tasks.length,
+    succeeded,
+    failed,
+  });
 
   return {
     startedAt,

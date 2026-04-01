@@ -1,12 +1,19 @@
 {
-  "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "model-status-worker-api",
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "model-status-worker",
   "main": "src/index.ts",
   "compatibility_date": "2026-04-01",
   "workers_dev": true,
   "account_id": "REPLACE_ME",
   "observability": {
     "enabled": true
+  },
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*"
+    ]
   },
   "d1_databases": [
     {
@@ -16,7 +23,7 @@
     }
   ],
   "vars": {
-    "APP_ORIGIN": "https://model-status-worker.pages.dev",
+    "APP_ORIGIN": "https://model-status-worker.workers.dev",
     "EXTRA_ALLOWED_ORIGINS": "",
     "ADMIN_USERNAME": "admin"
   },

@@ -3,11 +3,9 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const rootDir = process.cwd();
-const workerDir = path.join(rootDir, "apps", "worker");
-const webDir = path.join(rootDir, "apps", "web");
-const workerConfigPath = path.join(workerDir, "wrangler.jsonc");
-const workerTemplatePath = path.join(workerDir, "wrangler.template.jsonc");
-const workerSecretsPath = path.join(workerDir, ".deploy-secrets.env");
+const workerConfigPath = path.join(rootDir, "wrangler.jsonc");
+const workerTemplatePath = path.join(rootDir, "wrangler.template.jsonc");
+const workerSecretsPath = path.join(rootDir, ".deploy-secrets.env");
 const placeholderDatabaseId = "00000000-0000-0000-0000-000000000000";
 
 function sanitizeName(value) {
@@ -21,14 +19,13 @@ function sanitizeName(value) {
 
 const repoName = sanitizeName(path.basename(rootDir) || "model-status-worker");
 const projectName = sanitizeName(process.env.CF_PROJECT_NAME ?? repoName);
-const workerName = sanitizeName(process.env.CF_WORKER_NAME ?? `${projectName}-api`);
+const workerName = sanitizeName(process.env.CF_WORKER_NAME ?? projectName);
 const d1Name = sanitizeName(process.env.CF_D1_NAME ?? `${projectName}-db`);
-const pagesProjectName = sanitizeName(process.env.CF_PAGES_PROJECT_NAME ?? projectName);
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
 const adminUsername = process.env.ADMIN_USERNAME?.trim() || "admin";
 const adminPassword = process.env.ADMIN_PASSWORD?.trim();
 const sessionSecret = process.env.SESSION_SECRET?.trim();
-const appOrigin = process.env.APP_ORIGIN?.trim() || `https://${pagesProjectName}.pages.dev`;
+const appOrigin = process.env.APP_ORIGIN?.trim() || `https://${workerName}.workers.dev`;
 const extraAllowedOrigins = process.env.EXTRA_ALLOWED_ORIGINS?.trim() || "";
 
 function requireValue(name, value) {
@@ -176,66 +173,22 @@ function deployWorker() {
   return match[0];
 }
 
-function buildWeb(workerUrl) {
-  run(
-    process.platform === "win32" ? "npm.cmd" : "npm",
-    ["run", "build", "--workspace", "@model-status/web"],
-    {
-      env: {
-        ...process.env,
-        VITE_API_BASE_URL: workerUrl,
-      },
-    },
-  );
-}
-
-function ensurePagesProject() {
-  try {
-    npx([
-      "wrangler",
-      "pages",
-      "project",
-      "create",
-      pagesProjectName,
-      "--production-branch",
-      "main",
-    ]);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const existingProjectPattern = /already exists/iu;
-    if (!existingProjectPattern.test(message)) {
-      throw error;
-    }
-  }
-}
-
-function deployPages() {
-  npx([
-    "wrangler",
-    "pages",
-    "deploy",
-    path.join(webDir, "dist"),
-    "--project-name",
-    pagesProjectName,
-    "--branch",
-    "main",
-  ]);
+function buildWeb() {
+  run(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "build:web"]);
 }
 
 try {
   ensureAuthenticated();
   renderWorkerConfig();
+  buildWeb();
   ensureD1Binding();
   applyMigrations();
   writeSecretsFile();
 
   const workerUrl = deployWorker();
-  buildWeb(workerUrl);
-  ensurePagesProject();
-  deployPages();
 
-  process.stdout.write(`\nWorker URL: ${workerUrl}\n`);
-  process.stdout.write(`Pages URL: ${appOrigin}\n`);
+  process.stdout.write(`\nApp URL: ${appOrigin}\n`);
+  process.stdout.write(`Worker URL: ${workerUrl}\n`);
 } finally {
   if (existsSync(workerSecretsPath)) {
     unlinkSync(workerSecretsPath);
