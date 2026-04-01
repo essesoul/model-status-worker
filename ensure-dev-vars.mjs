@@ -10,6 +10,11 @@ const defaultPasswordLine = "ADMIN_PASSWORD=admin123";
 const placeholderPasswordLine = "ADMIN_PASSWORD=replace-with-a-strong-password";
 const placeholderSecretLine = "SESSION_SECRET=replace-with-a-long-random-string";
 
+function hasMissingOrBlankValue(content, key) {
+  const match = content.match(new RegExp(`^${key}=(.*)$`, "mu"));
+  return !match || !match[1].trim();
+}
+
 function randomValue(bytes = 24) {
   return randomBytes(bytes).toString("base64url");
 }
@@ -36,12 +41,12 @@ function ensureSecureDevSecrets(content) {
     new RegExp(`^${placeholderPasswordLine.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`, "mu"),
   ];
 
-  if (weakPasswordPatterns.some((pattern) => pattern.test(next)) || !next.includes("ADMIN_PASSWORD=")) {
+  if (weakPasswordPatterns.some((pattern) => pattern.test(next)) || hasMissingOrBlankValue(next, "ADMIN_PASSWORD")) {
     next = upsertLine(next, "ADMIN_PASSWORD", randomValue(18));
     changed = true;
   }
 
-  if (next.includes(placeholderSecretLine) || !next.includes("SESSION_SECRET=")) {
+  if (next.includes(placeholderSecretLine) || hasMissingOrBlankValue(next, "SESSION_SECRET")) {
     next = upsertLine(next, "SESSION_SECRET", randomValue(32));
     changed = true;
   }
