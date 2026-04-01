@@ -26,7 +26,9 @@ npm run dev
 
 ## 部署到 Cloudflare
 
-可直接点击上方 `Deploy to Cloudflare`，或者使用下面的方式手动部署。
+可直接点击上方 `Deploy to Cloudflare`，按钮会读取仓库根目录的 `wrangler.jsonc` 和 `package.json`。如果你是从这个仓库派生出去的，请先把改动推到公开仓库后再点击按钮。
+
+如果更希望从本地命令行手动部署，也可以使用下面的方式。
 
 先准备环境变量：
 
@@ -51,7 +53,7 @@ npm install
 npm run deploy:cloudflare
 ```
 
-部署脚本会自动构建前端、创建并绑定 D1、执行 migration，并发布 Worker。
+手动部署脚本会自动构建前端、创建并绑定 D1、执行 migration，并发布 Worker。它会把仅供本机复用的部署配置写入 `.wrangler.deploy.jsonc`，不会覆盖仓库里的正式 `wrangler.jsonc`。
 
 ## 常用命令
 
@@ -59,6 +61,7 @@ npm run deploy:cloudflare
 npm run dev
 npm run migrate:local
 npm run build
+npm run build:worker
 npm run typecheck
 ```
 

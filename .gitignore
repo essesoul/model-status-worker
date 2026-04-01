@@ -12,5 +12,5 @@ Thumbs.db
 .dev.vars
 *.tsbuildinfo
 npm-debug.log*
-wrangler.jsonc
+.wrangler.deploy.jsonc
 .deploy-secrets.env

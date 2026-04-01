@@ -7,12 +7,14 @@
   "type": "module",
   "scripts": {
     "dev": "node ./ensure-dev-vars.mjs && npm run build:web && node ./dev-local.mjs",
-    "dev:raw": "node ./ensure-dev-vars.mjs && npm run build:web && wrangler dev -c wrangler.template.jsonc --local",
-    "build": "npm run build:web && npm run build:worker",
+    "dev:raw": "node ./ensure-dev-vars.mjs && npm run build:web && wrangler dev -c wrangler.jsonc --local",
+    "build": "npm run build:web",
     "build:web": "tsc --noEmit -p tsconfig.web.json && vite build",
-    "build:worker": "wrangler deploy -c wrangler.template.jsonc --dry-run --outdir worker-dist --name model-status-worker-dry-run",
+    "build:worker": "wrangler deploy -c wrangler.jsonc --dry-run --outdir worker-dist --name model-status-worker-dry-run",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.web.json",
-    "migrate:local": "wrangler d1 migrations apply DB --local -c wrangler.template.jsonc",
+    "migrate:local": "wrangler d1 migrations apply DB --local -c wrangler.jsonc",
+    "migrate:remote": "wrangler d1 migrations apply DB --remote -c wrangler.jsonc",
+    "deploy": "npm run migrate:remote && wrangler deploy -c wrangler.jsonc --keep-vars",
     "deploy:cloudflare": "node ./deploy-cloudflare.mjs"
   },
   "dependencies": {

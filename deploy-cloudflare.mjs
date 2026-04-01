@@ -3,8 +3,8 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const rootDir = process.cwd();
-const workerConfigPath = path.join(rootDir, "wrangler.jsonc");
-const workerTemplatePath = path.join(rootDir, "wrangler.template.jsonc");
+const workerConfigPath = path.join(rootDir, ".wrangler.deploy.jsonc");
+const workerTemplatePath = path.join(rootDir, "wrangler.jsonc");
 const workerSecretsPath = path.join(rootDir, ".deploy-secrets.env");
 const placeholderDatabaseId = "00000000-0000-0000-0000-000000000000";
 

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-const wranglerArgs = ["wrangler", "dev", "-c", "wrangler.template.jsonc", "--local", "--test-scheduled"];
+const wranglerArgs = ["wrangler", "dev", "-c", "wrangler.jsonc", "--local", "--test-scheduled"];
 const wranglerCommand = process.platform === "win32" ? "cmd.exe" : "npx";
 const wranglerCommandArgs = process.platform === "win32"
   ? ["/d", "/s", "/c", `npx ${wranglerArgs.join(" ")}`]
