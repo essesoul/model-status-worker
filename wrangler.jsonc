@@ -25,7 +25,6 @@
   ],
   "vars": {
     "APP_ORIGIN": "https://model-status-worker.workers.dev",
-    "EXTRA_ALLOWED_ORIGINS": "",
     "ADMIN_USERNAME": "admin"
   },
   "triggers": {
