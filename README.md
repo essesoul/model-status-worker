@@ -12,7 +12,7 @@ npm run migrate:local
 npm run dev
 ```
 
-首次执行 `npm run dev` 时，如果本地没有 `.dev.vars`，会自动根据 `.dev.vars.example` 创建，并使用默认密码 `admin123`。
+首次执行 `npm run dev` 时，如果本地没有 `.dev.vars`，会自动根据 `.dev.vars.example` 创建，并生成本地开发用的随机后台密码和 `SESSION_SECRET`。
 
 启动后访问：
 
@@ -22,11 +22,11 @@ npm run dev
 默认后台账号：
 
 - 用户名：`admin`
-- 密码：`admin123`
+- 密码：首次本地启动时自动生成，保存在 `.dev.vars`
 
 ## 部署到 Cloudflare
 
-可直接点击上方 `Deploy to Cloudflare`，按钮会读取仓库根目录的 `wrangler.jsonc` 和 `package.json`。如果你是从这个仓库派生出去的，请先把改动推到公开仓库后再点击按钮。
+可直接点击上方 `Deploy to Cloudflare`
 
 如果更希望从本地命令行手动部署，也可以使用下面的方式。
 
