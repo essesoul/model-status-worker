@@ -113,6 +113,19 @@ function deploymentOrigin(request: Request): string {
   return new URL(request.url).origin;
 }
 
+function isLoopbackOrigin(value: string | undefined | null): boolean {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    return url.protocol.startsWith("http") && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+  } catch {
+    return false;
+  }
+}
+
 function needsCrossSiteSessionCookie(request: Request): boolean {
   const origin = requestOrigin(request);
   return Boolean(origin && origin !== deploymentOrigin(request));
@@ -216,16 +229,24 @@ export async function verifyTurnstileToken(
   };
 }
 
-export function getAllowedOrigins(appOrigin: string | undefined, extraAllowedOrigins: string | undefined): string[] {
-  return [
+export function getAllowedOrigins(
+  appOrigin: string | undefined,
+  extraAllowedOrigins: string | undefined,
+  includeLocalDevOrigins = false,
+): string[] {
+  const origins = [
     ...(appOrigin ? [appOrigin] : []),
     ...((extraAllowedOrigins ?? "")
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean)),
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
   ];
+
+  if (includeLocalDevOrigins || origins.some((origin) => isLoopbackOrigin(origin))) {
+    origins.push("http://localhost:5173", "http://127.0.0.1:5173");
+  }
+
+  return [...new Set(origins)];
 }
 
 export function getCorsAdminOrigin(request: Request): string | null {
@@ -243,5 +264,5 @@ export function isAllowedAdminOrigin(request: Request, appOrigin?: string, extra
     return true;
   }
 
-  return getAllowedOrigins(appOrigin, extraAllowedOrigins).includes(origin);
+  return getAllowedOrigins(appOrigin, extraAllowedOrigins, isLoopbackOrigin(deploymentOrigin(request))).includes(origin);
 }
