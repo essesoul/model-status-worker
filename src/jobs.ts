@@ -4,8 +4,10 @@ import { scoreProbeLatency } from "./scoring";
 import {
   SETTING_KEYS,
   type RuntimeSettings,
-  deactivateMissingModels,
+  deleteModelsByKeys,
+  deleteProbesStartedBefore,
   ensureBootstrap,
+  getOutdatedProbeCutoffIso,
   getRuntimeSettings,
   insertProbe,
   listModels,
@@ -56,12 +58,16 @@ function previewErrorBody(value: string): string | null {
   return trimmed.length <= 240 ? trimmed : `${trimmed.slice(0, 240)}...`;
 }
 
-function normalizeCatalogModels(payload: unknown): CatalogModel[] {
+function normalizeCatalogModels(payload: unknown): CatalogModel[] | null {
   const list = Array.isArray(payload)
     ? payload
     : payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown[] }).data)
       ? (payload as { data: unknown[] }).data
-      : [];
+      : null;
+
+  if (!list) {
+    return null;
+  }
 
   return list.reduce<CatalogModel[]>((accumulator, entry) => {
       if (!entry || typeof entry !== "object") {
@@ -525,6 +531,19 @@ function shouldRun(lastRunAt: string | null, intervalMs: number, nowMs = Date.no
 export async function syncModelCatalog(db: D1Database): Promise<SyncResult> {
   await ensureBootstrap(db);
   const settings = await getRuntimeSettings(db);
+  const existingModels = await listModels(db, false);
+  const existingModelsByUpstream = existingModels.reduce<Map<string, Array<{ upstreamId: string; id: string }>>>(
+    (accumulator, model) => {
+      const records = accumulator.get(model.upstreamId) ?? [];
+      records.push({
+        upstreamId: model.upstreamId,
+        id: model.id,
+      });
+      accumulator.set(model.upstreamId, records);
+      return accumulator;
+    },
+    new Map(),
+  );
   const syncedAt = new Date().toISOString();
   const errors: string[] = [];
   let totalFetched = 0;
@@ -558,6 +577,11 @@ export async function syncModelCatalog(db: D1Database): Promise<SyncResult> {
 
     const json = await response.json<unknown>();
     const models = normalizeCatalogModels(json);
+    if (!models) {
+      errors.push(`Models sync failed for ${upstream.name}: Invalid catalog payload.`);
+      continue;
+    }
+
     totalFetched += models.length;
 
     for (const model of models) {
@@ -575,12 +599,9 @@ export async function syncModelCatalog(db: D1Database): Promise<SyncResult> {
       });
     }
 
-    await deactivateMissingModels(
-      db,
-      upstream.id,
-      models.map((model) => model.id),
-      syncedAt,
-    );
+    const activeModelIds = new Set(models.map((model) => model.id));
+    const deleteKeys = (existingModelsByUpstream.get(upstream.id) ?? []).filter((model) => !activeModelIds.has(model.id));
+    await deleteModelsByKeys(db, deleteKeys);
   }
 
   await setSetting(db, SETTING_KEYS.lastCatalogSyncAt, syncedAt, syncedAt);
@@ -590,6 +611,19 @@ export async function syncModelCatalog(db: D1Database): Promise<SyncResult> {
     totalFetched,
     upserted: totalFetched,
     errors,
+  };
+}
+
+export async function cleanupOutdatedProbeData(
+  db: D1Database,
+): Promise<{ cutoffIso: string; deletedProbeCount: number }> {
+  await ensureBootstrap(db);
+  const cutoffIso = getOutdatedProbeCutoffIso();
+  const deletedProbeCount = await deleteProbesStartedBefore(db, cutoffIso);
+
+  return {
+    cutoffIso,
+    deletedProbeCount,
   };
 }
 

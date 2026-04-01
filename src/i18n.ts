@@ -58,6 +58,8 @@ const MESSAGES = {
     actionSyncing: "Syncing...",
     actionProbe: "Run probe",
     actionProbing: "Probing...",
+    actionCleanup: "Clean outdated data",
+    actionCleaning: "Cleaning...",
     actionSaveSettings: "Save settings",
     actionSaveModels: "Save models",
     actionSaving: "Saving...",
@@ -151,6 +153,8 @@ const MESSAGES = {
     noticeModelsSaved: "Model display settings saved.",
     noticeModelRemoved: "Model removed from the draft. Save models to apply.",
     noticeProbeRefresh: "Probe results refreshed.",
+    noticeCleanupCompleted: (count: number) =>
+      `Cleaned up ${count} outdated status ${count === 1 ? "record" : "records"}.`,
     errorLoadDashboard: "Failed to load the dashboard.",
     errorReadSession: "Failed to read the admin session.",
     errorLoadAdminData: "Failed to load admin data.",
@@ -170,6 +174,7 @@ const MESSAGES = {
     messageCatalogWarnings: (count: number) => `Model sync finished with ${count} warning(s).`,
     messageNoActiveModels: "No active models to probe.",
     messageProbeCompleted: "Probe cycle completed.",
+    messageCleanupCompleted: "Outdated status data cleaned up.",
     messageRequestFailed: (status: number) => `Request failed with status ${status}.`,
     messageProbeTimeout: "The probe request timed out.",
     messageProbeStreamUnreadable: "The upstream stream did not contain a parseable completion payload.",
@@ -235,6 +240,8 @@ const MESSAGES = {
     actionSyncing: "同步中...",
     actionProbe: "执行探测",
     actionProbing: "探测中...",
+    actionCleanup: "清理过时数据",
+    actionCleaning: "清理中...",
     actionSaveSettings: "保存设置",
     actionSaveModels: "保存模型",
     actionSaving: "保存中...",
@@ -328,6 +335,7 @@ const MESSAGES = {
     noticeModelsSaved: "模型展示设置已保存。",
     noticeModelRemoved: "模型已从当前编辑列表中移除，保存模型后生效。",
     noticeProbeRefresh: "探测结果已刷新。",
+    noticeCleanupCompleted: (count: number) => `已清理 ${count} 条过时状态记录。`,
     errorLoadDashboard: "加载状态页失败。",
     errorReadSession: "读取管理会话失败。",
     errorLoadAdminData: "加载管理数据失败。",
@@ -347,6 +355,7 @@ const MESSAGES = {
     messageCatalogWarnings: (count: number) => `模型同步完成，包含 ${count} 条警告。`,
     messageNoActiveModels: "当前没有可探测的启用模型。",
     messageProbeCompleted: "探测任务已完成。",
+    messageCleanupCompleted: "过时状态数据已清理。",
     messageRequestFailed: (status: number) => `请求失败，状态码 ${status}。`,
     messageProbeTimeout: "探测请求超时。",
     messageProbeStreamUnreadable: "上游流中没有可解析的补全内容。",
@@ -436,6 +445,8 @@ export function localizeRuntimeMessage(message: string, locale: Locale): string 
       return copy.messageNoActiveModels;
     case "Probe cycle completed":
       return copy.messageProbeCompleted;
+    case "Outdated status data cleaned up.":
+      return copy.messageCleanupCompleted;
     case "The operation was aborted due to timeout":
       return copy.messageProbeTimeout;
     case "Upstream stream did not contain a parseable completion payload":

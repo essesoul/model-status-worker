@@ -146,6 +146,13 @@ export function syncCatalogNow(): Promise<AdminActionResponse> {
   });
 }
 
+export function cleanupOutdatedDataNow(): Promise<AdminActionResponse> {
+  return request<AdminActionResponse>("/api/admin/actions/cleanup", {
+    method: "POST",
+    credentials: "include",
+  });
+}
+
 export function probeNow(): Promise<AdminActionResponse> {
   return request<AdminActionResponse>("/api/admin/actions/probe", {
     method: "POST",

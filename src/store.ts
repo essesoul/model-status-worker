@@ -7,6 +7,7 @@ import type {
   TurnstileLoginConfig,
   UpstreamInput,
 } from "./shared";
+import { rangeStartIso } from "./shared";
 
 export type UpstreamRecord = {
   id: string;
@@ -47,6 +48,8 @@ export type ProbeRecord = {
   totalLatencyMs: number;
   rawResponseText: string | null;
 };
+
+export const PROBE_HISTORY_RETENTION_RANGE = "30d" as const;
 
 export const SETTING_KEYS = {
   siteTitle: "SITE_TITLE",
@@ -463,6 +466,19 @@ export async function insertProbe(db: D1Database, probe: ProbeAttemptResult): Pr
       probe.rawResponseText ?? null,
     )
     .run();
+}
+
+export function getOutdatedProbeCutoffIso(now = new Date()): string {
+  return rangeStartIso(PROBE_HISTORY_RETENTION_RANGE, now);
+}
+
+export async function deleteProbesStartedBefore(db: D1Database, cutoffIso: string): Promise<number> {
+  const result = await db
+    .prepare("DELETE FROM probes WHERE started_at < ?")
+    .bind(cutoffIso)
+    .run();
+
+  return Number(result.meta.changes ?? 0);
 }
 
 export async function listProbesSince(db: D1Database, sinceIso: string): Promise<ProbeRecord[]> {

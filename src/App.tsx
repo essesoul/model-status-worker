@@ -13,6 +13,7 @@ import type {
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  cleanupOutdatedDataNow,
   fetchAdminDashboard,
   fetchAdminSession,
   fetchAdminSettings,
@@ -192,6 +193,11 @@ function toLocalizedMessage(error: unknown, locale: Locale, fallback: string): s
   }
 
   return localizeRuntimeMessage(error.message, locale);
+}
+
+function readDeletedProbeCount(detail: AdminActionResponse["detail"]): number {
+  const deletedProbeCount = detail?.deletedProbeCount;
+  return typeof deletedProbeCount === "number" && Number.isFinite(deletedProbeCount) ? deletedProbeCount : 0;
 }
 
 function AppHeader({
@@ -1228,7 +1234,7 @@ function AdminConsole({ locale, copy }: { locale: Locale; copy: Messages }) {
     }
   }
 
-  async function handleAction(action: "sync" | "probe") {
+  async function handleAction(action: "sync" | "probe" | "cleanup") {
     if (action === "probe") {
       await handleProbeWithLogs();
       return;
@@ -1237,8 +1243,15 @@ function AdminConsole({ locale, copy }: { locale: Locale; copy: Messages }) {
     setBusy(action);
 
     try {
-      const result: AdminActionResponse = await syncCatalogNow();
-      setNotice({ tone: "success", message: localizeRuntimeMessage(result.message, locale) });
+      const result: AdminActionResponse = action === "cleanup"
+        ? await cleanupOutdatedDataNow()
+        : await syncCatalogNow();
+      setNotice({
+        tone: "success",
+        message: action === "cleanup"
+          ? copy.noticeCleanupCompleted(readDeletedProbeCount(result.detail))
+          : localizeRuntimeMessage(result.message, locale),
+      });
       await refreshAdminData();
     } catch (error) {
       setNotice({
@@ -1406,6 +1419,9 @@ function AdminConsole({ locale, copy }: { locale: Locale; copy: Messages }) {
           </button>
           <button className="button" type="button" disabled={busy === "probe"} onClick={() => void handleAction("probe")}>
             {busy === "probe" ? copy.actionProbing : copy.actionProbe}
+          </button>
+          <button className="button" type="button" disabled={busy === "cleanup"} onClick={() => void handleAction("cleanup")}>
+            {busy === "cleanup" ? copy.actionCleaning : copy.actionCleanup}
           </button>
           <button className="button button-primary" type="button" disabled={busy === "settings" || !settings} onClick={() => void handleSaveSettings()}>
             {busy === "settings" ? copy.actionSaving : copy.actionSaveSettings}

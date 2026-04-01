@@ -20,7 +20,7 @@ import {
   verifyTurnstileToken,
 } from "./auth";
 import { getDashboardData } from "./dashboard";
-import { probeAllModels, runDueJobs, syncModelCatalog } from "./jobs";
+import { cleanupOutdatedProbeData, probeAllModels, runDueJobs, syncModelCatalog } from "./jobs";
 import {
   deleteModelsByKeys,
   ensureBootstrap,
@@ -356,6 +356,20 @@ app.post("/api/admin/actions/probe", async (c) => {
   return c.json({
     ok: true,
     message: result.total === 0 ? "No active models to probe" : "Probe cycle completed",
+    detail: result,
+  } satisfies AdminActionResponse);
+});
+
+app.post("/api/admin/actions/cleanup", async (c) => {
+  const session = await requireAdmin(c);
+  if (session instanceof Response) {
+    return session;
+  }
+
+  const result = await cleanupOutdatedProbeData(c.env.DB);
+  return c.json({
+    ok: true,
+    message: "Outdated status data cleaned up.",
     detail: result,
   } satisfies AdminActionResponse);
 });
