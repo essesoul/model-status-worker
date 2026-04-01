@@ -340,8 +340,8 @@ app.post("/api/admin/actions/sync", async (c) => {
   return c.json({
     ok: true,
     message: result.errors.length > 0
-      ? `Catalog sync finished with ${result.errors.length} warning(s)`
-      : "Catalog sync completed",
+      ? `Model sync finished with ${result.errors.length} warning(s)`
+      : "Model sync completed",
     detail: result,
   } satisfies AdminActionResponse);
 });

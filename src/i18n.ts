@@ -11,6 +11,7 @@ const SYSTEM_TITLE_ALIASES = new Set([
 const SYSTEM_SUBTITLE_ALIASES = new Set([
   "Cloudflare-native status board for OpenAI-compatible model APIs",
   "Single-worker status board for probe history, latency, and availability.",
+  "Single-worker status board for probe history, latency, and health.",
 ]);
 
 const MESSAGES = {
@@ -19,7 +20,7 @@ const MESSAGES = {
     brandIconAlt: "Model Status icon",
     navPublic: "Status",
     systemTitle: "Model Status",
-    systemSubtitle: "Single-worker status board for probe history, latency, and availability.",
+    systemSubtitle: "Single-worker status board for probe history, latency, and health.",
     documentTitlePublic: "Model Status",
     documentTitleAdmin: "Model Status Admin",
     publicKicker: "Public status",
@@ -27,19 +28,19 @@ const MESSAGES = {
     publicLoadingBody: "Reading probe history from the Worker API.",
     lastProbe: "Last probe",
     nextProbe: "Next probe",
-    lastCatalogSync: "Last catalog sync",
+    lastCatalogSync: "Last model sync",
     rangeHintRunning: "A probe cycle is running now.",
     summaryHealthy: "Healthy",
     summaryHealthyDetail: (count: number) => `${count} visible models`,
     summaryDegraded: "Degraded",
     summaryDegradedDetail: (count: number) => `Down ${count}`,
-    summaryAvailability: "Availability",
+    summaryAvailability: "Health",
     summaryAvailabilityDetail: (value: string) => `${value} models`,
     summaryLatency: "Total latency",
-    summaryLatencyDetail: (value: string) => `First character delay ${value}`,
+    summaryLatencyDetail: (value: string) => `First Token ${value}`,
     groupLabel: "Upstream group",
     groupCount: (count: number) => `${count} models`,
-    publicEmpty: "No visible models yet. Add an API key in the admin page, sync the catalog, then run a probe.",
+    publicEmpty: "No visible models yet. Add an API key in the admin page, sync models, then run a probe.",
     publicFooterPoweredBy: "Powered by",
     loadingDashboard: "Loading dashboard...",
     adminSignInKicker: "Admin access",
@@ -52,7 +53,7 @@ const MESSAGES = {
     adminKicker: "Admin console",
     adminLoadingTitle: "Loading settings",
     adminBody: "Manage probe settings, provider connections, and model presentation.",
-    actionSync: "Sync catalog",
+    actionSync: "Sync models",
     actionSyncing: "Syncing...",
     actionProbe: "Run probe",
     actionProbing: "Probing...",
@@ -70,10 +71,10 @@ const MESSAGES = {
     summaryVisibleDetail: (count: number) => `Hidden ${count}`,
     summaryHealthyShort: "Healthy",
     summaryHealthyShortDetail: (degraded: number, down: number) => `Degraded ${degraded} / Down ${down}`,
-    summaryLastCatalogSync: "Last catalog sync",
+    summaryLastCatalogSync: "Last model sync",
     summaryLastCatalogSyncDetail: (value: string) => `Last probe ${value}`,
     summaryAverageLatency: "Average latency",
-    summaryAverageLatencyDetail: (value: string) => `Availability ${value}`,
+    summaryAverageLatencyDetail: (value: string) => `Health ${value}`,
     runtimeKicker: "Runtime",
     runtimeTitle: "Probe and classification",
     runtimeBody: "These values control intervals, retry behavior, and status scoring.",
@@ -81,7 +82,7 @@ const MESSAGES = {
     fieldSiteSubtitle: "Site subtitle",
     fieldShowSummaryCards: "Show summary metrics",
     fieldProbeInterval: "Probe interval (ms)",
-    fieldCatalogSyncInterval: "Catalog sync interval (ms)",
+    fieldCatalogSyncInterval: "Model sync interval (ms)",
     fieldProbeTimeout: "Probe timeout (ms)",
     fieldProbeConcurrency: "Probe concurrency",
     fieldProbeMaxTokens: "Probe max tokens",
@@ -124,11 +125,11 @@ const MESSAGES = {
     tableStatus: "Status",
     tableActions: "Actions",
     deleteModel: "Delete",
-    emptyModelsAdmin: "No models available yet. Sync the catalog to load model rows.",
+    emptyModelsAdmin: "No models available yet. Sync models to load model rows.",
     loadingAdminSettings: "Loading admin settings...",
     statusTimelineAria: "Recent model status",
-    metricAvailability: "Availability",
-    metricFirstToken: "First character delay",
+    metricAvailability: "Health",
+    metricFirstToken: "First Token",
     metricTotal: "Total",
     statusUp: "Healthy",
     statusDegraded: "Degraded",
@@ -164,8 +165,8 @@ const MESSAGES = {
     messageTurnstileFailed: "Turnstile verification failed.",
     messageTurnstileIncomplete: "Turnstile requires both site key and secret key before it can be enabled.",
     messageModelsUpdated: "Model metadata updated.",
-    messageCatalogSyncCompleted: "Catalog sync completed.",
-    messageCatalogWarnings: (count: number) => `Catalog sync finished with ${count} warning(s).`,
+    messageCatalogSyncCompleted: "Model sync completed.",
+    messageCatalogWarnings: (count: number) => `Model sync finished with ${count} warning(s).`,
     messageNoActiveModels: "No active models to probe.",
     messageProbeCompleted: "Probe cycle completed.",
     messageRequestFailed: (status: number) => `Request failed with status ${status}.`,
@@ -182,7 +183,7 @@ const MESSAGES = {
       score: number,
       totalLatency: string,
       firstTokenLatency: string,
-    ) => `${upstreamName} / ${model}: ${classification}, score ${score}, total ${totalLatency}, first character delay ${firstTokenLatency}.`,
+    ) => `${upstreamName} / ${model}: ${classification}, score ${score}, total ${totalLatency}, First Token ${firstTokenLatency}.`,
     probeLogAttemptFailure: (upstreamName: string, model: string, attempt: number, detail: string) =>
       `${upstreamName} / ${model}: attempt ${attempt} failed, ${detail}.`,
     probeLogCycleFinished: (total: number, succeeded: number, failed: number) =>
@@ -203,7 +204,7 @@ const MESSAGES = {
     publicLoadingBody: "正在从 Worker API 读取探测历史。",
     lastProbe: "最近探测",
     nextProbe: "下一次探测",
-    lastCatalogSync: "最近目录同步",
+    lastCatalogSync: "最近模型同步",
     rangeHintRunning: "当前正在执行一轮探测。",
     summaryHealthy: "正常",
     summaryHealthyDetail: (count: number) => `${count} 个可见模型`,
@@ -215,7 +216,7 @@ const MESSAGES = {
     summaryLatencyDetail: (value: string) => `首字延时 ${value}`,
     groupLabel: "上游分组",
     groupCount: (count: number) => `${count} 个模型`,
-    publicEmpty: "当前还没有可见模型。请先在管理页添加 API Key，同步模型目录后再执行探测。",
+    publicEmpty: "当前还没有可见模型。请先在管理页添加 API Key，同步模型后再执行探测。",
     publicFooterPoweredBy: "Powered by",
     loadingDashboard: "正在加载状态页...",
     adminSignInKicker: "管理入口",
@@ -228,7 +229,7 @@ const MESSAGES = {
     adminKicker: "管理控制台",
     adminLoadingTitle: "正在加载设置",
     adminBody: "管理探测参数、上游连接和模型展示方式。",
-    actionSync: "同步目录",
+    actionSync: "同步模型",
     actionSyncing: "同步中...",
     actionProbe: "执行探测",
     actionProbing: "探测中...",
@@ -246,7 +247,7 @@ const MESSAGES = {
     summaryVisibleDetail: (count: number) => `隐藏 ${count}`,
     summaryHealthyShort: "正常",
     summaryHealthyShortDetail: (degraded: number, down: number) => `降级 ${degraded} / 不可用 ${down}`,
-    summaryLastCatalogSync: "最近目录同步",
+    summaryLastCatalogSync: "最近模型同步",
     summaryLastCatalogSyncDetail: (value: string) => `最近探测 ${value}`,
     summaryAverageLatency: "平均延迟",
     summaryAverageLatencyDetail: (value: string) => `可用率 ${value}`,
@@ -257,7 +258,7 @@ const MESSAGES = {
     fieldSiteSubtitle: "站点副标题",
     fieldShowSummaryCards: "显示汇总指标",
     fieldProbeInterval: "探测间隔（毫秒）",
-    fieldCatalogSyncInterval: "目录同步间隔（毫秒）",
+    fieldCatalogSyncInterval: "模型同步间隔（毫秒）",
     fieldProbeTimeout: "探测超时（毫秒）",
     fieldProbeConcurrency: "探测并发数",
     fieldProbeMaxTokens: "探测最大 tokens",
@@ -300,7 +301,7 @@ const MESSAGES = {
     tableStatus: "状态",
     tableActions: "操作",
     deleteModel: "删除",
-    emptyModelsAdmin: "当前还没有模型。请先同步模型目录。",
+    emptyModelsAdmin: "当前还没有模型。请先同步模型。",
     loadingAdminSettings: "正在加载管理设置...",
     statusTimelineAria: "最近模型状态",
     metricAvailability: "可用率",
@@ -340,8 +341,8 @@ const MESSAGES = {
     messageTurnstileFailed: "Turnstile 校验失败。",
     messageTurnstileIncomplete: "启用 Turnstile 前需要同时填写 Site Key 和 Secret Key。",
     messageModelsUpdated: "模型元数据已更新。",
-    messageCatalogSyncCompleted: "模型目录同步完成。",
-    messageCatalogWarnings: (count: number) => `模型目录同步完成，包含 ${count} 条警告。`,
+    messageCatalogSyncCompleted: "模型同步完成。",
+    messageCatalogWarnings: (count: number) => `模型同步完成，包含 ${count} 条警告。`,
     messageNoActiveModels: "当前没有可探测的启用模型。",
     messageProbeCompleted: "探测任务已完成。",
     messageRequestFailed: (status: number) => `请求失败，状态码 ${status}。`,
@@ -427,6 +428,7 @@ export function localizeRuntimeMessage(message: string, locale: Locale): string 
     case "Model metadata updated":
       return copy.messageModelsUpdated;
     case "Catalog sync completed":
+    case "Model sync completed":
       return copy.messageCatalogSyncCompleted;
     case "No active models to probe":
       return copy.messageNoActiveModels;
@@ -440,7 +442,7 @@ export function localizeRuntimeMessage(message: string, locale: Locale): string 
       return copy.messageProbeStreamNoContent;
   }
 
-  const warningMatch = trimmed.match(/^Catalog sync finished with (\d+) warning\(s\)$/u);
+  const warningMatch = trimmed.match(/^(?:Catalog|Model) sync finished with (\d+) warning\(s\)$/u);
   if (warningMatch) {
     return copy.messageCatalogWarnings(Number(warningMatch[1]));
   }

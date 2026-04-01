@@ -119,6 +119,14 @@ select {
   min-width: 0;
 }
 
+.brand-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
 .brand-eyebrow,
 .section-kicker,
 .meta-label,
@@ -149,6 +157,10 @@ select {
 .brand-title {
   font-size: clamp(1.5rem, 2.8vw, 2rem);
   line-height: 1.05;
+}
+
+.header-availability-pill {
+  flex: 0 0 auto;
 }
 
 .brand-description,
@@ -453,26 +465,57 @@ select {
 .model-panel {
   padding: 16px;
   background: var(--surface-muted);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.model-panel::-webkit-scrollbar {
+  display: none;
+}
+
+.model-panel-draggable {
+  cursor: grab;
+}
+
+.model-panel-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.model-panel-dragging * {
+  user-select: none;
 }
 
 .model-inline {
   display: grid;
-  grid-template-columns: minmax(220px, 1.25fr) minmax(132px, 0.8fr) minmax(300px, 1.45fr);
-  gap: 16px;
+  width: 100%;
+  margin: 0;
+  grid-template-columns: minmax(220px, 320px) minmax(260px, 1fr) 164px 270px;
+  gap: 18px;
   align-items: center;
 }
 
 .model-inline-dense {
-  grid-template-columns: minmax(220px, 1.2fr) minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: minmax(220px, 320px) minmax(260px, 1fr) 164px 270px;
 }
 
-.model-inline-dense .metric-row {
-  grid-column: 1 / -1;
+.model-inline-dense .timeline {
+  grid-auto-columns: 7px;
+  gap: 4px;
+  min-height: 34px;
+}
+
+.model-inline-dense .timeline-bar {
+  width: 7px;
+  height: 34px;
 }
 
 .model-heading {
+  grid-column: auto;
+  justify-self: stretch;
   min-width: 0;
+  text-align: left;
 }
 
 .model-name-row {
@@ -521,9 +564,9 @@ select {
 .availability-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  padding: 0 10px;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
@@ -596,10 +639,27 @@ select {
 }
 
 .timeline-shell {
+  grid-column: auto;
+  justify-self: stretch;
+  min-width: 0;
   width: 100%;
+  max-width: none;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+}
+
+.timeline-shell-draggable {
+  cursor: grab;
+}
+
+.timeline-shell-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.timeline-shell-dragging * {
+  user-select: none;
 }
 
 .timeline-shell::-webkit-scrollbar {
@@ -609,17 +669,17 @@ select {
 .timeline {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: 6px;
+  grid-auto-columns: 7px;
   gap: 4px;
   margin-top: 0;
   align-items: end;
   width: max-content;
-  min-height: 28px;
+  min-height: 34px;
 }
 
 .timeline-bar {
-  width: 6px;
-  height: 28px;
+  width: 7px;
+  height: 34px;
   border-radius: 999px;
 }
 
@@ -639,31 +699,53 @@ select {
   background: #c4ccd6;
 }
 
-.metric-row {
+.model-availability {
+  grid-column: auto;
+  justify-self: stretch;
+  width: 100%;
+  min-width: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  justify-items: center;
+}
+
+.model-availability .availability-pill {
+  justify-self: center;
+  width: auto;
+  max-width: 100%;
+  justify-content: center;
+}
+
+.metric-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: 18px;
   margin-top: 0;
   padding-top: 0;
   border-top: 0;
+  min-width: 0;
+  justify-content: end;
 }
 
 .metric-cell {
   min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: baseline;
+  gap: 8px;
   white-space: nowrap;
 }
 
 .metric-row .metric-label {
   display: inline-block;
+  font-size: 13px;
 }
 
 .metric-row .metric-value {
   display: inline;
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 1.12rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .admin-grid {
@@ -876,11 +958,12 @@ select {
   }
 
   .model-inline {
-    grid-template-columns: minmax(200px, 1fr) minmax(110px, 0.75fr) minmax(0, 1.2fr);
+    grid-template-columns: minmax(200px, 250px) minmax(200px, 1fr) 156px 248px;
+    gap: 18px;
   }
 
   .model-inline-dense {
-    grid-template-columns: minmax(200px, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(200px, 250px) minmax(200px, 1fr) 156px 248px;
   }
 }
 
@@ -930,8 +1013,34 @@ select {
   }
 
   .model-inline {
+    width: 100%;
+    margin: 0;
     grid-template-columns: 1fr;
+    gap: 12px;
     align-items: start;
+  }
+
+  .model-heading,
+  .timeline-shell,
+  .model-availability,
+  .metric-row {
+    grid-column: auto;
+    justify-self: stretch;
+  }
+
+  .model-availability .availability-pill {
+    justify-self: start;
+  }
+
+  .model-inline-dense .timeline {
+    grid-auto-columns: 6px;
+    gap: 4px;
+    min-height: 30px;
+  }
+
+  .model-inline-dense .timeline-bar {
+    width: 6px;
+    height: 30px;
   }
 
   .model-name-row {

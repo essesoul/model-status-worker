@@ -193,7 +193,19 @@ function toLocalizedMessage(error: unknown, locale: Locale, fallback: string): s
   return localizeRuntimeMessage(error.message, locale);
 }
 
-function AppHeader({ route, copy, actions }: { route: Route; copy: Messages; actions?: React.ReactNode }) {
+function AppHeader({
+  route,
+  copy,
+  actions,
+  overallAvailability,
+  locale,
+}: {
+  route: Route;
+  copy: Messages;
+  actions?: React.ReactNode;
+  overallAvailability?: number | null;
+  locale: Locale;
+}) {
   const showNav = route === "admin";
 
   return (
@@ -203,7 +215,12 @@ function AppHeader({ route, copy, actions }: { route: Route; copy: Messages; act
           <img className="brand-icon" src="/project-icon.svg" alt={copy.brandIconAlt} />
         </div>
         <div className="brand-copy">
-          <h1 className="brand-title">{copy.brandTitle}</h1>
+          <div className="brand-title-row">
+            <h1 className="brand-title">{copy.brandTitle}</h1>
+            {route === "public" && overallAvailability !== null && overallAvailability !== undefined ? (
+              <AvailabilityPill value={overallAvailability} locale={locale} copy={copy} className="header-availability-pill" />
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -247,15 +264,18 @@ function AvailabilityPill({
   value,
   locale,
   copy,
+  className,
 }: {
   value: number;
   locale: Locale;
   copy: Messages;
+  className?: string;
 }) {
   const tier = availabilityTier(value);
+  const classes = [`availability-pill`, `availability-pill-${tier}`, className].filter(Boolean).join(" ");
 
   return (
-    <span className={`availability-pill availability-pill-${tier}`}>
+    <span className={classes}>
       <span className="availability-dot" aria-hidden="true" />
       <span>{copy.metricAvailability}</span>
       <strong>{formatAvailability(value, locale)}</strong>
@@ -399,8 +419,144 @@ function StatusTimeline({
   locale: Locale;
   copy: Messages;
 }) {
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const dragStateRef = useRef<{ pointerId: number; startX: number; startScrollLeft: number } | null>(null);
+  const shouldPinRightRef = useRef(true);
+  const isSyncingScrollRef = useRef(false);
+  const [isDraggable, setIsDraggable] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    shouldPinRightRef.current = true;
+  }, [statuses]);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) {
+      return;
+    }
+
+    const updateDraggable = () => {
+      const maxScrollLeft = Math.max(0, shell.scrollWidth - shell.clientWidth);
+      const nextIsDraggable = maxScrollLeft > 1;
+      setIsDraggable(nextIsDraggable);
+
+      if (!nextIsDraggable) {
+        if (shell.scrollLeft !== 0) {
+          isSyncingScrollRef.current = true;
+          shell.scrollLeft = 0;
+          requestAnimationFrame(() => {
+            isSyncingScrollRef.current = false;
+          });
+        }
+        return;
+      }
+
+      if (!shouldPinRightRef.current || Math.abs(shell.scrollLeft - maxScrollLeft) < 1) {
+        return;
+      }
+
+      isSyncingScrollRef.current = true;
+      shell.scrollLeft = maxScrollLeft;
+      requestAnimationFrame(() => {
+        isSyncingScrollRef.current = false;
+      });
+    };
+
+    updateDraggable();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateDraggable);
+      return () => {
+        window.removeEventListener("resize", updateDraggable);
+      };
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateDraggable();
+    });
+
+    observer.observe(shell);
+    if (shell.firstElementChild instanceof HTMLElement) {
+      observer.observe(shell.firstElementChild);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [statuses]);
+
+  const stopDragging = () => {
+    dragStateRef.current = null;
+    setIsDragging(false);
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggable || event.pointerType !== "mouse" || event.button !== 0) {
+      return;
+    }
+
+    const shell = shellRef.current;
+    if (!shell) {
+      return;
+    }
+
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: shell.scrollLeft,
+    };
+    shouldPinRightRef.current = false;
+    shell.setPointerCapture(event.pointerId);
+    setIsDragging(true);
+    event.preventDefault();
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const dragState = dragStateRef.current;
+    const shell = shellRef.current;
+    if (!dragState || !shell || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    shell.scrollLeft = dragState.startScrollLeft - (event.clientX - dragState.startX);
+  };
+
+  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const shell = shellRef.current;
+    if (shell?.hasPointerCapture(event.pointerId)) {
+      shell.releasePointerCapture(event.pointerId);
+    }
+    stopDragging();
+  };
+
+  const handleScroll = () => {
+    if (isSyncingScrollRef.current) {
+      return;
+    }
+
+    shouldPinRightRef.current = false;
+  };
+
+  const timelineShellClassName = [
+    "timeline-shell",
+    isDraggable ? "timeline-shell-draggable" : "",
+    isDragging ? "timeline-shell-dragging" : "",
+  ].filter(Boolean).join(" ");
+
   return (
-    <div className="timeline-shell" role="img" aria-label={copy.statusTimelineAria}>
+    <div
+      ref={shellRef}
+      className={timelineShellClassName}
+      role="img"
+      aria-label={copy.statusTimelineAria}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={stopDragging}
+      onLostPointerCapture={stopDragging}
+      onScroll={handleScroll}
+    >
       <div className="timeline">
         {statuses.map((status) => (
           <span
@@ -429,9 +585,107 @@ function ModelPanel({
   copy: Messages;
 }) {
   const isDenseTimeline = model.recentStatuses.length >= 30;
+  const panelRef = useRef<HTMLElement | null>(null);
+  const dragStateRef = useRef<{ pointerId: number; startX: number; startScrollLeft: number } | null>(null);
+  const [isPanelDraggable, setIsPanelDraggable] = useState(false);
+  const [isPanelDragging, setIsPanelDragging] = useState(false);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    const updateDraggable = () => {
+      setIsPanelDraggable(panel.scrollWidth > panel.clientWidth + 1);
+    };
+
+    updateDraggable();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateDraggable);
+      return () => {
+        window.removeEventListener("resize", updateDraggable);
+      };
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateDraggable();
+    });
+
+    observer.observe(panel);
+    if (panel.firstElementChild instanceof HTMLElement) {
+      observer.observe(panel.firstElementChild);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [model]);
+
+  const stopPanelDragging = () => {
+    dragStateRef.current = null;
+    setIsPanelDragging(false);
+  };
+
+  const handlePanelPointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    if (!isPanelDraggable || event.pointerType !== "mouse" || event.button !== 0) {
+      return;
+    }
+
+    if (event.target instanceof Element && event.target.closest(".timeline-shell")) {
+      return;
+    }
+
+    const panel = panelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: panel.scrollLeft,
+    };
+    panel.setPointerCapture(event.pointerId);
+    setIsPanelDragging(true);
+    event.preventDefault();
+  };
+
+  const handlePanelPointerMove = (event: React.PointerEvent<HTMLElement>) => {
+    const dragState = dragStateRef.current;
+    const panel = panelRef.current;
+    if (!dragState || !panel || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    panel.scrollLeft = dragState.startScrollLeft - (event.clientX - dragState.startX);
+  };
+
+  const handlePanelPointerUp = (event: React.PointerEvent<HTMLElement>) => {
+    const panel = panelRef.current;
+    if (panel?.hasPointerCapture(event.pointerId)) {
+      panel.releasePointerCapture(event.pointerId);
+    }
+    stopPanelDragging();
+  };
+
+  const modelPanelClassName = [
+    "model-panel",
+    isPanelDraggable ? "model-panel-draggable" : "",
+    isPanelDragging ? "model-panel-dragging" : "",
+  ].filter(Boolean).join(" ");
 
   return (
-    <article className="model-panel">
+    <article
+      ref={panelRef}
+      className={modelPanelClassName}
+      onPointerDown={handlePanelPointerDown}
+      onPointerMove={handlePanelPointerMove}
+      onPointerUp={handlePanelPointerUp}
+      onPointerCancel={stopPanelDragging}
+      onLostPointerCapture={stopPanelDragging}
+    >
       <div className={isDenseTimeline ? "model-inline model-inline-dense" : "model-inline"}>
         <div className="model-heading">
           <div className="model-name-row">
@@ -439,7 +693,6 @@ function ModelPanel({
               {model.icon ? <span className="model-icon">{model.icon}</span> : null}
               <span>{model.displayName || model.model}</span>
             </p>
-            <AvailabilityPill value={model.availabilityPercentage} locale={locale} copy={copy} />
           </div>
           <p className="model-subtitle">
             {model.model}
@@ -448,6 +701,10 @@ function ModelPanel({
         </div>
 
         <StatusTimeline statuses={model.recentStatuses} locale={locale} copy={copy} />
+
+        <div className="model-availability">
+          <AvailabilityPill value={model.availabilityPercentage} locale={locale} copy={copy} />
+        </div>
 
         <div className="metric-row">
           <div className="metric-cell">
@@ -468,10 +725,12 @@ function PublicDashboard({
   locale,
   copy,
   range,
+  onOverallAvailabilityChange,
 }: {
   locale: Locale;
   copy: Messages;
   range: DashboardRange;
+  onOverallAvailabilityChange?: (value: number | null) => void;
 }) {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -514,6 +773,10 @@ function PublicDashboard({
       window.clearInterval(intervalId);
     };
   }, [copy.errorLoadDashboard, locale, range]);
+
+  useEffect(() => {
+    onOverallAvailabilityChange?.(dashboard?.summary.availabilityPercentage ?? null);
+  }, [dashboard?.summary.availabilityPercentage, onOverallAvailabilityChange]);
 
   const groups = useMemo(() => groupModels(dashboard?.models ?? []), [dashboard?.models]);
 
@@ -1433,6 +1696,7 @@ export default function App() {
   const route = getRoute();
   const [locale, setLocale] = useState<Locale>(() => detectBrowserLocale());
   const [publicTimelineUnit, setPublicTimelineUnit] = useState<PublicTimelineUnit>("hours");
+  const [overallAvailability, setOverallAvailability] = useState<number | null>(null);
   const copy = getMessages(locale);
   const publicRange: DashboardRange = publicTimelineUnit === "hours" ? "30h" : "30d";
 
@@ -1459,6 +1723,8 @@ export default function App() {
         <AppHeader
           route={route}
           copy={copy}
+          locale={locale}
+          overallAvailability={route === "public" ? overallAvailability : null}
           actions={route === "public" ? (
             <div className="range-list" role="tablist" aria-label={copy.publicKicker}>
               <button
@@ -1482,7 +1748,7 @@ export default function App() {
         />
         {route === "admin"
           ? <AdminConsole locale={locale} copy={copy} />
-          : <PublicDashboard locale={locale} copy={copy} range={publicRange} />}
+          : <PublicDashboard locale={locale} copy={copy} range={publicRange} onOverallAvailabilityChange={setOverallAvailability} />}
       </main>
     </div>
   );
