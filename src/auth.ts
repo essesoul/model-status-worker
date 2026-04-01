@@ -163,6 +163,59 @@ export function isValidLogin(username: string, password: string, expectedUsernam
   return constantTimeEqual(username.trim(), expectedUsername) && constantTimeEqual(password, expectedPassword);
 }
 
+function extractClientIp(request: Request): string | null {
+  const connectingIp = request.headers.get("CF-Connecting-IP");
+  if (connectingIp) {
+    return connectingIp.trim();
+  }
+
+  const forwardedFor = request.headers.get("X-Forwarded-For");
+  if (!forwardedFor) {
+    return null;
+  }
+
+  return forwardedFor.split(",")[0]?.trim() || null;
+}
+
+export async function verifyTurnstileToken(
+  request: Request,
+  secretKey: string,
+  token: string,
+): Promise<{ success: boolean; errorCodes: string[] }> {
+  const params = new URLSearchParams();
+  params.set("secret", secretKey);
+  params.set("response", token);
+  const clientIp = extractClientIp(request);
+  if (clientIp) {
+    params.set("remoteip", clientIp);
+  }
+
+  const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: params.toString(),
+  });
+
+  if (!response.ok) {
+    return {
+      success: false,
+      errorCodes: [`siteverify-request-failed:${response.status}`],
+    };
+  }
+
+  const payload = await response.json<{
+    success?: boolean;
+    "error-codes"?: string[];
+  }>();
+
+  return {
+    success: payload.success === true,
+    errorCodes: Array.isArray(payload["error-codes"]) ? payload["error-codes"] : [],
+  };
+}
+
 export function getAllowedOrigins(appOrigin: string | undefined, extraAllowedOrigins: string | undefined): string[] {
   return [
     ...(appOrigin ? [appOrigin] : []),

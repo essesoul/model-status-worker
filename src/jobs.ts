@@ -103,6 +103,39 @@ function extractContent(payload: unknown): string | null {
   }
 
   const record = payload as Record<string, unknown>;
+  const type = typeof record.type === "string" ? record.type : "";
+
+  if (type === "response.output_text.delta" && typeof record.delta === "string" && record.delta.length > 0) {
+    return record.delta;
+  }
+
+  if (type === "response.output_text.done" && typeof record.text === "string" && record.text.length > 0) {
+    return record.text;
+  }
+
+  if (typeof record.output_text === "string" && record.output_text.length > 0) {
+    return record.output_text;
+  }
+
+  const output = Array.isArray(record.output) ? record.output : [];
+  for (const entry of output) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    const content = Array.isArray((entry as { content?: unknown[] }).content) ? (entry as { content: unknown[] }).content : [];
+    for (const part of content) {
+      if (!part || typeof part !== "object") {
+        continue;
+      }
+
+      const partRecord = part as Record<string, unknown>;
+      if (partRecord.type === "output_text" && typeof partRecord.text === "string" && partRecord.text.length > 0) {
+        return partRecord.text;
+      }
+    }
+  }
+
   const choices = Array.isArray(record.choices) ? record.choices : [];
   const firstChoice = choices[0];
 
@@ -133,7 +166,45 @@ function isParseableCompletionPayload(payload: unknown): boolean {
   }
 
   const record = payload as Record<string, unknown>;
-  return Array.isArray(record.choices) || typeof record.content === "string";
+  const type = typeof record.type === "string" ? record.type : "";
+  return type.startsWith("response.")
+    || type === "error"
+    || Array.isArray(record.output)
+    || Array.isArray(record.choices)
+    || typeof record.content === "string"
+    || typeof record.output_text === "string";
+}
+
+function extractStreamError(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const type = typeof record.type === "string" ? record.type : "";
+
+  if (type === "error") {
+    const error = record.error;
+    if (error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string") {
+      return (error as { message: string }).message;
+    }
+
+    if (typeof record.message === "string") {
+      return record.message;
+    }
+  }
+
+  if (type === "response.failed") {
+    const response = record.response;
+    if (response && typeof response === "object") {
+      const error = (response as { error?: unknown }).error;
+      if (error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string") {
+        return (error as { message: string }).message;
+      }
+    }
+  }
+
+  return null;
 }
 
 async function runSingleProbe(
@@ -146,7 +217,7 @@ async function runSingleProbe(
   let response: Response;
 
   try {
-    response = await fetch(`${upstream.apiBaseUrl}/chat/completions`, {
+    response = await fetch(`${upstream.apiBaseUrl}/responses`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${upstream.apiKey}`,
@@ -155,9 +226,18 @@ async function runSingleProbe(
       body: JSON.stringify({
         model,
         stream: true,
-        max_tokens: settings.probeMaxTokens,
-        temperature: settings.probeTemperature,
-        messages: [{ role: "user", content: PROBE_PROMPT }],
+        max_output_tokens: settings.probeMaxTokens,
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: PROBE_PROMPT,
+              },
+            ],
+          },
+        ],
       }),
       signal: AbortSignal.timeout(settings.probeTimeoutMs),
     });
@@ -200,6 +280,7 @@ async function runSingleProbe(
   let sseBuffer = "";
   let parsedPayloadSeen = false;
   let contentSeen = false;
+  let streamError: string | null = null;
 
   try {
     if (response.body) {
@@ -227,6 +308,10 @@ async function runSingleProbe(
 
           try {
             const parsed = JSON.parse(payload) as unknown;
+            const errorMessage = extractStreamError(parsed);
+            if (errorMessage) {
+              streamError = errorMessage;
+            }
             parsedPayloadSeen = parsedPayloadSeen || isParseableCompletionPayload(parsed);
             const content = extractContent(parsed);
             if (content) {
@@ -238,6 +323,10 @@ async function runSingleProbe(
           } catch {
             // Ignore provider-specific payload fragments.
           }
+        }
+
+        if (streamError) {
+          break;
         }
       }
     }
@@ -259,6 +348,36 @@ async function runSingleProbe(
   }
 
   const completedAt = new Date();
+
+  if (!parsedPayloadSeen && rawResponseText.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(rawResponseText) as unknown;
+      const errorMessage = extractStreamError(parsed);
+      if (errorMessage) {
+        streamError = errorMessage;
+      }
+      parsedPayloadSeen = isParseableCompletionPayload(parsed);
+      contentSeen = Boolean(extractContent(parsed));
+    } catch {
+      // Ignore non-JSON fallback bodies.
+    }
+  }
+
+  if (streamError) {
+    return {
+      upstreamId: upstream.id,
+      upstreamName: upstream.name,
+      model,
+      startedAt: startedAtDate.toISOString(),
+      completedAt: completedAt.toISOString(),
+      success: false,
+      statusCode: response.status,
+      connectivityLatencyMs,
+      totalLatencyMs: Math.round(performance.now() - startedAtPerf),
+      error: streamError,
+      rawResponseText: truncateText(rawResponseText),
+    };
+  }
 
   if (!parsedPayloadSeen || !contentSeen) {
     return {

@@ -18,7 +18,7 @@ import {
 } from "./store";
 
 const RANGE_BUCKET_COUNT: Record<DashboardRange, number> = {
-  "90m": 90,
+  "30h": 30,
   "24h": 24,
   "7d": 7,
   "30d": 30,
@@ -130,36 +130,7 @@ function buildRecentStatuses(
 ): ProbeStatusSample[] {
   const fromMs = Date.parse(rangeStartIso(range, toDate));
   const toMs = toDate.getTime();
-  const bucketCount = range === "90m"
-    ? Math.max(1, Math.min(RANGE_BUCKET_COUNT[range], Math.ceil((90 * 60 * 1000) / settings.probeIntervalMs)))
-    : RANGE_BUCKET_COUNT[range];
-
-  if (range === "90m") {
-    const sortedProbes = [...probes]
-      .filter((probe) => {
-        const probeMs = Date.parse(probe.startedAt);
-        return probeMs >= fromMs && probeMs <= toMs;
-      })
-      .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
-
-    const recentSamples = sortedProbes.slice(-bucketCount).map((probe) => buildProbeSample(probe, settings));
-    if (recentSamples.length >= bucketCount) {
-      return recentSamples;
-    }
-
-    const missingCount = bucketCount - recentSamples.length;
-    const padding = Array.from({ length: missingCount }, (_, index) => {
-      const bucketStartMs = fromMs + index * settings.probeIntervalMs;
-      const bucketEndMs = Math.min(bucketStartMs + settings.probeIntervalMs, toMs);
-      return buildEmptySample(
-        `${range}-empty-${bucketStartMs}`,
-        new Date(bucketStartMs).toISOString(),
-        new Date(bucketEndMs).toISOString(),
-      );
-    });
-
-    return [...padding, ...recentSamples];
-  }
+  const bucketCount = RANGE_BUCKET_COUNT[range];
 
   const bucketMs = Math.max(1, Math.floor((toMs - fromMs) / bucketCount));
 

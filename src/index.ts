@@ -17,12 +17,14 @@ import {
   getSession,
   isAllowedAdminOrigin,
   isValidLogin,
+  verifyTurnstileToken,
 } from "./auth";
 import { getDashboardData } from "./dashboard";
 import { probeAllModels, runDueJobs, syncModelCatalog } from "./jobs";
 import {
   deleteModelsByKeys,
   ensureBootstrap,
+  getAdminLoginConfig,
   getAdminSettingsResponse,
   getRuntimeSettings,
   listModels,
@@ -51,22 +53,49 @@ function createSseResponse(
   run: (send: (event: string, data: unknown) => Promise<void>) => Promise<void>,
 ): Response {
   const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
+    start(controller) {
       const encoder = new TextEncoder();
+      let closed = false;
 
-      async function send(event: string, data: unknown) {
-        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
-      }
+      const safeClose = () => {
+        if (closed) {
+          return;
+        }
 
-      try {
-        await run(send);
-      } catch (error) {
-        await send("fatal", {
-          message: error instanceof Error ? error.message : "Internal probe stream error",
-        });
-      } finally {
-        controller.close();
-      }
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          // Ignore close errors after the client disconnects.
+        }
+      };
+
+      const send = async (event: string, data: unknown) => {
+        if (closed) {
+          return;
+        }
+
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          closed = true;
+        }
+      };
+
+      void (async () => {
+        try {
+          await run(send);
+        } catch (error) {
+          await send("fatal", {
+            message: error instanceof Error ? error.message : "Internal probe stream error",
+          });
+        } finally {
+          safeClose();
+        }
+      })();
+    },
+    cancel() {
+      // The client closed the connection; the async sender will stop on the next send attempt.
     },
   });
 
@@ -108,7 +137,7 @@ async function requireAdmin(c: {
   env: Bindings;
   json: (body: unknown, status?: number) => Response;
   header: (name: string, value: string) => void;
-}): Promise<AdminSessionResponse | Response> {
+}): Promise<{ authenticated: boolean; username: string | null } | Response> {
   if (!applyAdminCors(c)) {
     return c.json({ error: "Invalid origin" }, 403);
   }
@@ -150,9 +179,9 @@ app.get("/api/health", async (c) => {
 });
 
 app.get("/api/dashboard", async (c) => {
-  const rangeParam = c.req.query("range") ?? "90m";
+  const rangeParam = c.req.query("range") ?? "24h";
   if (!isDashboardRange(rangeParam)) {
-    return c.json({ error: "Invalid range. Use one of: 90m,24h,7d,30d" }, 400);
+    return c.json({ error: "Invalid range. Use one of: 30h,24h,7d,30d" }, 400);
   }
 
   const settings = await getRuntimeSettings(c.env.DB);
@@ -165,7 +194,15 @@ app.get("/api/admin/session", async (c) => {
     return c.json({ error: "Invalid origin" }, 403);
   }
 
-  return c.json(await getSession(c.req.raw, c.env.SESSION_SECRET));
+  const [session, turnstile] = await Promise.all([
+    getSession(c.req.raw, c.env.SESSION_SECRET),
+    getAdminLoginConfig(c.env.DB),
+  ]);
+
+  return c.json({
+    ...session,
+    turnstile,
+  } satisfies AdminSessionResponse);
 });
 
 app.post("/api/admin/login", async (c) => {
@@ -174,6 +211,23 @@ app.post("/api/admin/login", async (c) => {
   }
 
   const payload = await c.req.json<LoginRequest>();
+  const turnstile = await getAdminLoginConfig(c.env.DB);
+  if (turnstile.enabled) {
+    const turnstileToken = payload.turnstileToken?.trim();
+    if (!turnstileToken) {
+      return c.json({ error: "Turnstile verification is required" }, 400);
+    }
+
+    const verification = await verifyTurnstileToken(c.req.raw, (await getRuntimeSettings(c.env.DB)).turnstileSecretKey, turnstileToken);
+    if (!verification.success) {
+      return c.json({
+        error: verification.errorCodes.length > 0
+          ? `Turnstile verification failed: ${verification.errorCodes.join(", ")}`
+          : "Turnstile verification failed",
+      }, 400);
+    }
+  }
+
   const username = c.env.ADMIN_USERNAME?.trim() || "admin";
   if (!isValidLogin(payload.username, payload.password, username, c.env.ADMIN_PASSWORD)) {
     return c.json({ error: "Invalid username or password" }, 401);
@@ -183,6 +237,7 @@ app.post("/api/admin/login", async (c) => {
   return c.json({
     authenticated: true,
     username,
+    turnstile,
   } satisfies AdminSessionResponse);
 });
 
@@ -192,9 +247,11 @@ app.post("/api/admin/logout", async (c) => {
   }
 
   c.header("Set-Cookie", clearSessionCookie(c.req.raw));
+  const turnstile = await getAdminLoginConfig(c.env.DB);
   return c.json({
     authenticated: false,
     username: null,
+    turnstile,
   } satisfies AdminSessionResponse);
 });
 
@@ -214,7 +271,14 @@ app.put("/api/admin/settings", async (c) => {
   }
 
   const payload = await c.req.json<UpdateAdminSettingsRequest>();
-  return c.json(await updateAdminSettings(c.env.DB, payload));
+
+  try {
+    return c.json(await updateAdminSettings(c.env.DB, payload));
+  } catch (error) {
+    return c.json({
+      error: error instanceof Error ? error.message : "Invalid settings payload",
+    }, 400);
+  }
 });
 
 app.get("/api/admin/dashboard", async (c) => {

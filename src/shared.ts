@@ -1,4 +1,4 @@
-export const DASHBOARD_RANGES = ["90m", "24h", "7d", "30d"] as const;
+export const DASHBOARD_RANGES = ["30h", "24h", "7d", "30d"] as const;
 
 export type DashboardRange = (typeof DASHBOARD_RANGES)[number];
 export type ProbeLevel = "up" | "degraded" | "down" | "empty";
@@ -89,6 +89,24 @@ export type UpstreamView = {
   apiKeyMasked: string | null;
 };
 
+export type TurnstileInput = {
+  enabled?: boolean;
+  siteKey?: string;
+  secretKey?: string;
+};
+
+export type TurnstileLoginConfig = {
+  enabled: boolean;
+  siteKey: string;
+};
+
+export type TurnstileAdminConfig = {
+  enabled: boolean;
+  siteKey: string;
+  secretKeyConfigured: boolean;
+  secretKeyMasked: string | null;
+};
+
 export type AdminSettings = {
   siteTitle: string;
   siteSubtitle: string;
@@ -109,12 +127,14 @@ export type AdminSettingsResponse = {
   settings: AdminSettings;
   upstreams: UpstreamView[];
   apiKeyConfigured: boolean;
+  turnstile: TurnstileAdminConfig;
 };
 
 export type AdminDashboardResponse = DashboardResponse;
 
 export type UpdateAdminSettingsRequest = Partial<AdminSettings> & {
   upstreams?: UpstreamInput[];
+  turnstile?: TurnstileInput;
 };
 
 export type UpdateAdminModelsRequest = {
@@ -178,11 +198,13 @@ export type ProbeStreamEvent =
 export type AdminSessionResponse = {
   authenticated: boolean;
   username: string | null;
+  turnstile: TurnstileLoginConfig;
 };
 
 export type LoginRequest = {
   username: string;
   password: string;
+  turnstileToken?: string | null;
 };
 
 export type ProbeAttemptResult = {
@@ -208,8 +230,8 @@ export function rangeStartIso(range: DashboardRange, toDate = new Date()): strin
   const copy = new Date(toDate);
 
   switch (range) {
-    case "90m":
-      copy.setMinutes(copy.getMinutes() - 90);
+    case "30h":
+      copy.setHours(copy.getHours() - 30);
       break;
     case "24h":
       copy.setHours(copy.getHours() - 24);

@@ -2,6 +2,9 @@ import type {
   AdminSettings,
   AdminSettingsResponse,
   ProbeAttemptResult,
+  TurnstileAdminConfig,
+  TurnstileInput,
+  TurnstileLoginConfig,
   UpstreamInput,
 } from "./shared";
 
@@ -59,6 +62,9 @@ export const SETTING_KEYS = {
   failedRetryAttempts: "FAILED_RETRY_ATTEMPTS",
   modelStatusUpScoreThreshold: "MODEL_STATUS_UP_SCORE_THRESHOLD",
   modelStatusDegradedScoreThreshold: "MODEL_STATUS_DEGRADED_SCORE_THRESHOLD",
+  turnstileEnabled: "TURNSTILE_ENABLED",
+  turnstileSiteKey: "TURNSTILE_SITE_KEY",
+  turnstileSecretKey: "TURNSTILE_SECRET_KEY",
   lastCatalogSyncAt: "LAST_CATALOG_SYNC_AT",
   lastProbeAt: "LAST_PROBE_AT",
   lastProbeStartedAt: "LAST_PROBE_STARTED_AT",
@@ -67,6 +73,9 @@ export const SETTING_KEYS = {
 
 export type RuntimeSettings = AdminSettings & {
   upstreams: UpstreamRecord[];
+  turnstileEnabled: boolean;
+  turnstileSiteKey: string;
+  turnstileSecretKey: string;
   lastCatalogSyncAt: string | null;
   lastProbeAt: string | null;
   lastProbeStartedAt: string | null;
@@ -122,7 +131,7 @@ const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
   siteTitle: "Model Status worker",
   siteSubtitle: "Cloudflare-native status board for OpenAI-compatible model APIs",
   showSummaryCards: true,
-  probeIntervalMs: 5 * 60_000,
+  probeIntervalMs: 60 * 60_000,
   catalogSyncIntervalMs: 15 * 60_000,
   probeTimeoutMs: 20_000,
   probeConcurrency: 4,
@@ -472,6 +481,8 @@ export async function ensureBootstrap(db: D1Database): Promise<void> {
   const nowIso = new Date().toISOString();
   const settings = await listSettings(db);
   const defaults = getDefaultAdminSettings();
+  const legacyDefaultProbeIntervalMs = String(5 * 60_000);
+  const nextDefaultProbeIntervalMs = String(defaults.probeIntervalMs);
 
   await setSettingsBatch(
     db,
@@ -489,11 +500,18 @@ export async function ensureBootstrap(db: D1Database): Promise<void> {
       [SETTING_KEYS.failedRetryAttempts, String(defaults.failedRetryAttempts)],
       [SETTING_KEYS.modelStatusUpScoreThreshold, String(defaults.modelStatusUpScoreThreshold)],
       [SETTING_KEYS.modelStatusDegradedScoreThreshold, String(defaults.modelStatusDegradedScoreThreshold)],
+      [SETTING_KEYS.turnstileEnabled, "0"],
+      [SETTING_KEYS.turnstileSiteKey, ""],
+      [SETTING_KEYS.turnstileSecretKey, ""],
     ]
       .filter(([key]) => !(key in settings))
       .map(([key, value]) => ({ key, value })),
     nowIso,
   );
+
+  if (settings[SETTING_KEYS.probeIntervalMs] === legacyDefaultProbeIntervalMs) {
+    await setSetting(db, SETTING_KEYS.probeIntervalMs, nextDefaultProbeIntervalMs, nowIso);
+  }
 
   const upstreams = await listUpstreams(db, false);
   if (upstreams.length === 0 && Object.keys(settings).length === 0) {
@@ -530,10 +548,19 @@ function parseSettings(raw: Record<string, string>): AdminSettings {
   };
 }
 
+function parseTurnstileConfig(raw: Record<string, string>): TurnstileLoginConfig & { secretKey: string } {
+  return {
+    enabled: raw[SETTING_KEYS.turnstileEnabled] === "1",
+    siteKey: raw[SETTING_KEYS.turnstileSiteKey] ?? "",
+    secretKey: raw[SETTING_KEYS.turnstileSecretKey] ?? "",
+  };
+}
+
 export async function getRuntimeSettings(db: D1Database): Promise<RuntimeSettings> {
   await ensureBootstrap(db);
   const rawSettings = await listSettings(db);
   const adminSettings = parseSettings(rawSettings);
+  const turnstile = parseTurnstileConfig(rawSettings);
   const upstreams = (await listUpstreams(db, true))
     .filter((upstream) => upstream.apiKey.trim().length > 0)
     .map((upstream) => ({
@@ -545,6 +572,9 @@ export async function getRuntimeSettings(db: D1Database): Promise<RuntimeSetting
   return {
     ...adminSettings,
     upstreams,
+    turnstileEnabled: turnstile.enabled,
+    turnstileSiteKey: turnstile.siteKey,
+    turnstileSecretKey: turnstile.secretKey,
     lastCatalogSyncAt: rawSettings[SETTING_KEYS.lastCatalogSyncAt] ?? null,
     lastProbeAt: rawSettings[SETTING_KEYS.lastProbeAt] ?? null,
     lastProbeStartedAt: rawSettings[SETTING_KEYS.lastProbeStartedAt] ?? null,
@@ -556,6 +586,12 @@ export async function getAdminSettingsResponse(db: D1Database): Promise<AdminSet
   await ensureBootstrap(db);
   const settings = await getRuntimeSettings(db);
   const upstreams = await listUpstreams(db, false);
+  const turnstile: TurnstileAdminConfig = {
+    enabled: settings.turnstileEnabled,
+    siteKey: settings.turnstileSiteKey,
+    secretKeyConfigured: settings.turnstileSecretKey.trim().length > 0,
+    secretKeyMasked: maskApiKey(settings.turnstileSecretKey),
+  };
 
   return {
     settings: {
@@ -584,12 +620,24 @@ export async function getAdminSettingsResponse(db: D1Database): Promise<AdminSet
       apiKeyMasked: maskApiKey(upstream.apiKey),
     })),
     apiKeyConfigured: upstreams.some((upstream) => upstream.apiKey.trim().length > 0),
+    turnstile,
+  };
+}
+
+export async function getAdminLoginConfig(db: D1Database): Promise<TurnstileLoginConfig> {
+  await ensureBootstrap(db);
+  const rawSettings = await listSettings(db);
+  const turnstile = parseTurnstileConfig(rawSettings);
+
+  return {
+    enabled: turnstile.enabled && turnstile.siteKey.trim().length > 0 && turnstile.secretKey.trim().length > 0,
+    siteKey: turnstile.siteKey,
   };
 }
 
 export async function updateAdminSettings(
   db: D1Database,
-  updates: Partial<AdminSettings> & { upstreams?: UpstreamInput[] },
+  updates: Partial<AdminSettings> & { upstreams?: UpstreamInput[]; turnstile?: TurnstileInput },
 ): Promise<AdminSettingsResponse> {
   await ensureBootstrap(db);
   const currentSettings = await getRuntimeSettings(db);
@@ -619,6 +667,20 @@ export async function updateAdminSettings(
     ),
   };
 
+  const nextTurnstileEnabled = typeof updates.turnstile?.enabled === "boolean"
+    ? updates.turnstile.enabled
+    : currentSettings.turnstileEnabled;
+  const nextTurnstileSiteKey = typeof updates.turnstile?.siteKey === "string"
+    ? updates.turnstile.siteKey.trim()
+    : currentSettings.turnstileSiteKey;
+  const nextTurnstileSecretKey = typeof updates.turnstile?.secretKey === "string" && updates.turnstile.secretKey.trim().length > 0
+    ? updates.turnstile.secretKey.trim()
+    : currentSettings.turnstileSecretKey;
+
+  if (nextTurnstileEnabled && (!nextTurnstileSiteKey || !nextTurnstileSecretKey)) {
+    throw new Error("Turnstile requires both site key and secret key before it can be enabled");
+  }
+
   await setSettingsBatch(
     db,
     [
@@ -635,6 +697,9 @@ export async function updateAdminSettings(
       { key: SETTING_KEYS.failedRetryAttempts, value: String(nextSettings.failedRetryAttempts) },
       { key: SETTING_KEYS.modelStatusUpScoreThreshold, value: String(nextSettings.modelStatusUpScoreThreshold) },
       { key: SETTING_KEYS.modelStatusDegradedScoreThreshold, value: String(nextSettings.modelStatusDegradedScoreThreshold) },
+      { key: SETTING_KEYS.turnstileEnabled, value: nextTurnstileEnabled ? "1" : "0" },
+      { key: SETTING_KEYS.turnstileSiteKey, value: nextTurnstileSiteKey },
+      { key: SETTING_KEYS.turnstileSecretKey, value: nextTurnstileSecretKey },
     ],
     nowIso,
   );

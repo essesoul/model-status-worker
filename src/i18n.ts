@@ -34,12 +34,13 @@ const MESSAGES = {
     summaryDegraded: "Degraded",
     summaryDegradedDetail: (count: number) => `Down ${count}`,
     summaryAvailability: "Availability",
-    summaryAvailabilityDetail: (value: string) => `Connect ${value}`,
+    summaryAvailabilityDetail: (value: string) => `${value} models`,
     summaryLatency: "Total latency",
-    summaryLatencyDetail: (value: string) => `First token ${value}`,
+    summaryLatencyDetail: (value: string) => `First character delay ${value}`,
     groupLabel: "Upstream group",
     groupCount: (count: number) => `${count} models`,
     publicEmpty: "No visible models yet. Add an API key in the admin page, sync the catalog, then run a probe.",
+    publicFooterPoweredBy: "Powered by",
     loadingDashboard: "Loading dashboard...",
     adminSignInKicker: "Admin access",
     adminSignInTitle: "Sign in",
@@ -89,6 +90,12 @@ const MESSAGES = {
     fieldDegradedThreshold: "Degraded threshold",
     fieldDegradedRetries: "Degraded retries",
     fieldFailedRetries: "Failed retries",
+    fieldTurnstileEnabled: "Enable Turnstile",
+    fieldTurnstileSiteKey: "Turnstile site key",
+    fieldTurnstileSecretKey: "Turnstile secret key",
+    fieldStoredSecret: "Stored secret",
+    storedSecretMissing: "Not configured",
+    turnstileSecretPlaceholder: "Only paste when adding or rotating the secret key",
     upstreamKicker: "Upstreams",
     upstreamTitle: "Provider connections",
     upstreamBody: "Each upstream can use its own base URL, model list URL, and API key.",
@@ -121,8 +128,7 @@ const MESSAGES = {
     loadingAdminSettings: "Loading admin settings...",
     statusTimelineAria: "Recent model status",
     metricAvailability: "Availability",
-    metricConnect: "Connect",
-    metricFirstToken: "First token",
+    metricFirstToken: "First character delay",
     metricTotal: "Total",
     statusUp: "Healthy",
     statusDegraded: "Degraded",
@@ -130,11 +136,13 @@ const MESSAGES = {
     statusEmpty: "No data",
     statusTitle: (status: string, started: string, ended: string, score: string) => `${status} | ${started} - ${ended} | ${score}`,
     rangeLabels: {
-      "90m": "90m",
+      "30h": "30h",
       "24h": "24h",
       "7d": "7d",
       "30d": "30d",
     } satisfies Record<DashboardRange, string>,
+    timelineUnitHours: "Hours",
+    timelineUnitDays: "Days",
     noticeSignedIn: "Signed in.",
     noticeLoggedOut: "Logged out.",
     noticeSettingsSaved: "Settings saved.",
@@ -144,13 +152,17 @@ const MESSAGES = {
     errorLoadDashboard: "Failed to load the dashboard.",
     errorReadSession: "Failed to read the admin session.",
     errorLoadAdminData: "Failed to load admin data.",
+    errorLogin: "Login failed.",
     errorSaveSettings: "Failed to save settings.",
     errorSaveModels: "Failed to save model settings.",
     errorAction: "Action failed.",
     messageInvalidCredentials: "Invalid username or password.",
     messageUnauthorized: "Unauthorized.",
     messageInvalidOrigin: "Invalid origin.",
-    messageInvalidRange: "Invalid range. Use 90m, 24h, 7d, or 30d.",
+    messageInvalidRange: "Invalid range. Use 30h, 24h, 7d, or 30d.",
+    messageTurnstileRequired: "Turnstile verification is required.",
+    messageTurnstileFailed: "Turnstile verification failed.",
+    messageTurnstileIncomplete: "Turnstile requires both site key and secret key before it can be enabled.",
     messageModelsUpdated: "Model metadata updated.",
     messageCatalogSyncCompleted: "Catalog sync completed.",
     messageCatalogWarnings: (count: number) => `Catalog sync finished with ${count} warning(s).`,
@@ -170,7 +182,7 @@ const MESSAGES = {
       score: number,
       totalLatency: string,
       firstTokenLatency: string,
-    ) => `${upstreamName} / ${model}: ${classification}, score ${score}, total ${totalLatency}, first token ${firstTokenLatency}.`,
+    ) => `${upstreamName} / ${model}: ${classification}, score ${score}, total ${totalLatency}, first character delay ${firstTokenLatency}.`,
     probeLogAttemptFailure: (upstreamName: string, model: string, attempt: number, detail: string) =>
       `${upstreamName} / ${model}: attempt ${attempt} failed, ${detail}.`,
     probeLogCycleFinished: (total: number, succeeded: number, failed: number) =>
@@ -198,12 +210,13 @@ const MESSAGES = {
     summaryDegraded: "降级",
     summaryDegradedDetail: (count: number) => `不可用 ${count}`,
     summaryAvailability: "可用率",
-    summaryAvailabilityDetail: (value: string) => `连接 ${value}`,
+    summaryAvailabilityDetail: (value: string) => `共 ${value} 个模型`,
     summaryLatency: "总延迟",
-    summaryLatencyDetail: (value: string) => `首 token ${value}`,
+    summaryLatencyDetail: (value: string) => `首字延时 ${value}`,
     groupLabel: "上游分组",
     groupCount: (count: number) => `${count} 个模型`,
     publicEmpty: "当前还没有可见模型。请先在管理页添加 API Key，同步模型目录后再执行探测。",
+    publicFooterPoweredBy: "Powered by",
     loadingDashboard: "正在加载状态页...",
     adminSignInKicker: "管理入口",
     adminSignInTitle: "登录",
@@ -253,6 +266,12 @@ const MESSAGES = {
     fieldDegradedThreshold: "降级阈值",
     fieldDegradedRetries: "降级重试次数",
     fieldFailedRetries: "失败重试次数",
+    fieldTurnstileEnabled: "启用 Turnstile",
+    fieldTurnstileSiteKey: "Turnstile Site Key",
+    fieldTurnstileSecretKey: "Turnstile Secret Key",
+    fieldStoredSecret: "已存储密钥",
+    storedSecretMissing: "未配置",
+    turnstileSecretPlaceholder: "仅在新增或轮换密钥时填写",
     upstreamKicker: "上游配置",
     upstreamTitle: "供应商连接",
     upstreamBody: "每个上游都可以配置独立的基础地址、模型列表地址和 API Key。",
@@ -285,8 +304,7 @@ const MESSAGES = {
     loadingAdminSettings: "正在加载管理设置...",
     statusTimelineAria: "最近模型状态",
     metricAvailability: "可用率",
-    metricConnect: "连接",
-    metricFirstToken: "首 token",
+    metricFirstToken: "首字延时",
     metricTotal: "总耗时",
     statusUp: "正常",
     statusDegraded: "降级",
@@ -294,11 +312,13 @@ const MESSAGES = {
     statusEmpty: "无数据",
     statusTitle: (status: string, started: string, ended: string, score: string) => `${status} | ${started} - ${ended} | ${score}`,
     rangeLabels: {
-      "90m": "90 分钟",
+      "30h": "30 小时",
       "24h": "24 小时",
       "7d": "7 天",
       "30d": "30 天",
     } satisfies Record<DashboardRange, string>,
+    timelineUnitHours: "小时",
+    timelineUnitDays: "天",
     noticeSignedIn: "已登录。",
     noticeLoggedOut: "已退出登录。",
     noticeSettingsSaved: "设置已保存。",
@@ -308,13 +328,17 @@ const MESSAGES = {
     errorLoadDashboard: "加载状态页失败。",
     errorReadSession: "读取管理会话失败。",
     errorLoadAdminData: "加载管理数据失败。",
+    errorLogin: "登录失败。",
     errorSaveSettings: "保存设置失败。",
     errorSaveModels: "保存模型设置失败。",
     errorAction: "操作失败。",
     messageInvalidCredentials: "用户名或密码错误。",
     messageUnauthorized: "未授权。",
     messageInvalidOrigin: "来源无效。",
-    messageInvalidRange: "时间范围无效，请使用 90m、24h、7d 或 30d。",
+    messageInvalidRange: "时间范围无效，请使用 30h、24h、7d 或 30d。",
+    messageTurnstileRequired: "需要完成 Turnstile 校验。",
+    messageTurnstileFailed: "Turnstile 校验失败。",
+    messageTurnstileIncomplete: "启用 Turnstile 前需要同时填写 Site Key 和 Secret Key。",
     messageModelsUpdated: "模型元数据已更新。",
     messageCatalogSyncCompleted: "模型目录同步完成。",
     messageCatalogWarnings: (count: number) => `模型目录同步完成，包含 ${count} 条警告。`,
@@ -334,7 +358,7 @@ const MESSAGES = {
       score: number,
       totalLatency: string,
       firstTokenLatency: string,
-    ) => `${upstreamName} / ${model}：${classification}，评分 ${score}，总耗时 ${totalLatency}，首 token ${firstTokenLatency}。`,
+    ) => `${upstreamName} / ${model}：${classification}，评分 ${score}，总耗时 ${totalLatency}，首字延时 ${firstTokenLatency}。`,
     probeLogAttemptFailure: (upstreamName: string, model: string, attempt: number, detail: string) =>
       `${upstreamName} / ${model}：第 ${attempt} 次尝试失败，${detail}。`,
     probeLogCycleFinished: (total: number, succeeded: number, failed: number) =>
@@ -392,8 +416,14 @@ export function localizeRuntimeMessage(message: string, locale: Locale): string 
       return copy.messageUnauthorized;
     case "Invalid origin":
       return copy.messageInvalidOrigin;
-    case "Invalid range. Use one of: 90m,24h,7d,30d":
+    case "Invalid range. Use one of: 30h,24h,7d,30d":
       return copy.messageInvalidRange;
+    case "Turnstile verification is required":
+      return copy.messageTurnstileRequired;
+    case "Turnstile verification failed":
+      return copy.messageTurnstileFailed;
+    case "Turnstile requires both site key and secret key before it can be enabled":
+      return copy.messageTurnstileIncomplete;
     case "Model metadata updated":
       return copy.messageModelsUpdated;
     case "Catalog sync completed":
@@ -413,6 +443,11 @@ export function localizeRuntimeMessage(message: string, locale: Locale): string 
   const warningMatch = trimmed.match(/^Catalog sync finished with (\d+) warning\(s\)$/u);
   if (warningMatch) {
     return copy.messageCatalogWarnings(Number(warningMatch[1]));
+  }
+
+  const turnstileFailureMatch = trimmed.match(/^Turnstile verification failed: /u);
+  if (turnstileFailureMatch) {
+    return copy.messageTurnstileFailed;
   }
 
   const statusMatch = trimmed.match(/^Request failed with status (\d+)$/u);

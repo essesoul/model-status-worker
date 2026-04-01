@@ -172,6 +172,14 @@ select {
   flex-wrap: wrap;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .nav-link,
 .range-button,
 .button {
@@ -270,6 +278,10 @@ select {
   margin: 0;
 }
 
+.public-meta-strip {
+  margin-bottom: 16px;
+}
+
 .meta-item {
   margin: 0;
   padding: 12px;
@@ -289,18 +301,15 @@ select {
   color: var(--text);
 }
 
-.filter-panel {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: center;
-}
-
 .range-list,
 .action-row {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.public-note {
+  margin: 0 0 16px;
 }
 
 .summary-grid {
@@ -402,6 +411,24 @@ select {
   padding: 18px;
 }
 
+.public-footer {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 0 0;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.public-footer-link {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .group-section {
   padding: 18px;
 }
@@ -428,14 +455,30 @@ select {
   background: var(--surface-muted);
 }
 
-.model-header {
-  display: flex;
-  justify-content: space-between;
+.model-inline {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.25fr) minmax(132px, 0.8fr) minmax(300px, 1.45fr);
   gap: 16px;
-  align-items: flex-start;
+  align-items: center;
+}
+
+.model-inline-dense {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.model-inline-dense .metric-row {
+  grid-column: 1 / -1;
 }
 
 .model-heading {
+  min-width: 0;
+}
+
+.model-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -447,6 +490,14 @@ select {
   font-size: 1rem;
   font-weight: 600;
   color: var(--text);
+  min-width: 0;
+}
+
+.model-name span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .model-icon {
@@ -462,9 +513,49 @@ select {
   color: var(--muted);
   font-family: "IBM Plex Mono", monospace;
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.status-badge {
+.availability-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.availability-pill strong {
+  font-weight: 600;
+}
+
+.availability-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 8px;
+}
+
+.availability-pill-low .availability-dot {
+  background: #c53434;
+}
+
+.availability-pill-medium .availability-dot {
+  background: #b96b00;
+}
+
+.availability-pill-high .availability-dot {
+  background: #1b8a48;
+}
+
+.state-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -504,30 +595,75 @@ select {
   color: var(--empty-text);
 }
 
+.timeline-shell {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.timeline-shell::-webkit-scrollbar {
+  display: none;
+}
+
 .timeline {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 6px;
   gap: 4px;
-  margin-top: 14px;
+  margin-top: 0;
+  align-items: end;
+  width: max-content;
+  min-height: 28px;
 }
 
 .timeline-bar {
-  flex: 1;
-  min-width: 8px;
-  height: 8px;
-  border-radius: var(--radius-soft);
+  width: 6px;
+  height: 28px;
+  border-radius: 999px;
+}
+
+.timeline-bar.is-up {
+  background: #1b8a48;
+}
+
+.timeline-bar.is-degraded {
+  background: #d3a20a;
+}
+
+.timeline-bar.is-down {
+  background: #c53434;
+}
+
+.timeline-bar.is-empty {
+  background: #c4ccd6;
 }
 
 .metric-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .metric-cell {
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.metric-row .metric-label {
+  display: inline-block;
+}
+
+.metric-row .metric-value {
+  display: inline;
+  margin: 0;
+  font-size: 0.95rem;
 }
 
 .admin-grid {
@@ -577,6 +713,17 @@ select {
   background: var(--surface-muted);
 }
 
+.turnstile-shell {
+  min-height: 66px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.turnstile-shell > div {
+  width: 100%;
+}
+
 .auth-submit {
   width: 100%;
 }
@@ -595,6 +742,12 @@ select {
 
 .field-span-2 {
   grid-column: span 2;
+}
+
+.form-divider {
+  height: 1px;
+  margin: 4px 0 2px;
+  background: var(--line);
 }
 
 .field input,
@@ -714,13 +867,20 @@ select {
 
 @media (max-width: 1080px) {
   .summary-grid,
-  .metric-row,
   .meta-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .admin-grid {
     grid-template-columns: 1fr;
+  }
+
+  .model-inline {
+    grid-template-columns: minmax(200px, 1fr) minmax(110px, 0.75fr) minmax(0, 1.2fr);
+  }
+
+  .model-inline-dense {
+    grid-template-columns: minmax(200px, 1fr) minmax(0, 1fr);
   }
 }
 
@@ -731,8 +891,6 @@ select {
   }
 
   .app-header,
-  .filter-panel,
-  .model-header,
   .section-heading {
     flex-direction: column;
     align-items: stretch;
@@ -754,6 +912,7 @@ select {
   }
 
   .nav-list,
+  .header-actions,
   .range-list,
   .action-row {
     width: 100%;
@@ -765,9 +924,33 @@ select {
     flex: 1 1 auto;
   }
 
-  .status-badge {
+  .state-chip {
     min-width: 0;
     width: fit-content;
+  }
+
+  .model-inline {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .model-name-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .timeline-shell {
+    max-width: 100%;
+  }
+
+  .metric-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+  }
+
+  .metric-cell {
+    flex-wrap: wrap;
+    white-space: normal;
   }
 
   .modal-header {
