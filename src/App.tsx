@@ -61,6 +61,7 @@ type ProbeModalState = {
 };
 
 type PublicTimelineUnit = "hours" | "days";
+type PublicHeaderMeta = Pick<DashboardResponse["meta"], "lastProbeAt" | "nextProbeAt" | "lastCatalogSyncAt">;
 
 type TurnstileWidgetProps = {
   enabled: boolean;
@@ -198,15 +199,22 @@ function AppHeader({
   copy,
   actions,
   overallAvailability,
+  publicMeta,
   locale,
 }: {
   route: Route;
   copy: Messages;
   actions?: React.ReactNode;
   overallAvailability?: number | null;
+  publicMeta?: PublicHeaderMeta | null;
   locale: Locale;
 }) {
   const showNav = route === "admin";
+  const publicMetaItems = publicMeta ? [
+    { label: copy.lastProbe, value: formatTime(publicMeta.lastProbeAt, locale, copy) },
+    { label: copy.nextProbe, value: formatTime(publicMeta.nextProbeAt, locale, copy) },
+    { label: copy.lastCatalogSync, value: formatTime(publicMeta.lastCatalogSyncAt, locale, copy) },
+  ] : [];
 
   return (
     <header className="app-header">
@@ -232,7 +240,35 @@ function AppHeader({
             </a>
           </nav>
         ) : null}
-        {actions}
+        {route === "public" ? (
+          <div className="header-public-tools">
+            {publicMetaItems.length > 0 ? (
+              <>
+                <dl className="header-meta-list">
+                  {publicMetaItems.map((item) => (
+                    <div key={item.label} className="header-meta-item">
+                      <dt className="header-meta-label">{item.label}</dt>
+                      <dd className="header-meta-value">{item.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <details className="header-meta-menu">
+                  <summary className="header-meta-toggle">{copy.headerMetaToggle}</summary>
+                  <dl className="header-meta-dropdown">
+                    {publicMetaItems.map((item) => (
+                      <div key={item.label} className="header-meta-item">
+                        <dt className="header-meta-label">{item.label}</dt>
+                        <dd className="header-meta-value">{item.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </details>
+              </>
+            ) : null}
+            {actions}
+          </div>
+        ) : actions}
       </div>
     </header>
   );
@@ -726,11 +762,13 @@ function PublicDashboard({
   copy,
   range,
   onOverallAvailabilityChange,
+  onMetaChange,
 }: {
   locale: Locale;
   copy: Messages;
   range: DashboardRange;
   onOverallAvailabilityChange?: (value: number | null) => void;
+  onMetaChange?: (value: PublicHeaderMeta | null) => void;
 }) {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -778,25 +816,20 @@ function PublicDashboard({
     onOverallAvailabilityChange?.(dashboard?.summary.availabilityPercentage ?? null);
   }, [dashboard?.summary.availabilityPercentage, onOverallAvailabilityChange]);
 
+  useEffect(() => {
+    onMetaChange?.(
+      dashboard ? {
+        lastProbeAt: dashboard.meta.lastProbeAt,
+        nextProbeAt: dashboard.meta.nextProbeAt,
+        lastCatalogSyncAt: dashboard.meta.lastCatalogSyncAt,
+      } : null,
+    );
+  }, [dashboard?.meta.lastCatalogSyncAt, dashboard?.meta.lastProbeAt, dashboard?.meta.nextProbeAt, onMetaChange]);
+
   const groups = useMemo(() => groupModels(dashboard?.models ?? []), [dashboard?.models]);
 
   return (
     <>
-      <dl className="meta-strip public-meta-strip">
-        <div className="meta-item">
-          <dt className="meta-label">{copy.lastProbe}</dt>
-          <dd className="meta-value">{formatTime(dashboard?.meta.lastProbeAt ?? null, locale, copy)}</dd>
-        </div>
-        <div className="meta-item">
-          <dt className="meta-label">{copy.nextProbe}</dt>
-          <dd className="meta-value">{formatTime(dashboard?.meta.nextProbeAt ?? null, locale, copy)}</dd>
-        </div>
-        <div className="meta-item">
-          <dt className="meta-label">{copy.lastCatalogSync}</dt>
-          <dd className="meta-value">{formatTime(dashboard?.meta.lastCatalogSyncAt ?? null, locale, copy)}</dd>
-        </div>
-      </dl>
-
       {dashboard?.meta.isProbeCycleRunning ? <p className="section-note public-note">{copy.rangeHintRunning}</p> : null}
 
       <section className="page-stack">
@@ -1697,6 +1730,7 @@ export default function App() {
   const [locale, setLocale] = useState<Locale>(() => detectBrowserLocale());
   const [publicTimelineUnit, setPublicTimelineUnit] = useState<PublicTimelineUnit>("hours");
   const [overallAvailability, setOverallAvailability] = useState<number | null>(null);
+  const [publicMeta, setPublicMeta] = useState<PublicHeaderMeta | null>(null);
   const copy = getMessages(locale);
   const publicRange: DashboardRange = publicTimelineUnit === "hours" ? "30h" : "30d";
 
@@ -1725,6 +1759,7 @@ export default function App() {
           copy={copy}
           locale={locale}
           overallAvailability={route === "public" ? overallAvailability : null}
+          publicMeta={route === "public" ? publicMeta : null}
           actions={route === "public" ? (
             <div className="range-list" role="tablist" aria-label={copy.publicKicker}>
               <button
@@ -1748,7 +1783,15 @@ export default function App() {
         />
         {route === "admin"
           ? <AdminConsole locale={locale} copy={copy} />
-          : <PublicDashboard locale={locale} copy={copy} range={publicRange} onOverallAvailabilityChange={setOverallAvailability} />}
+          : (
+            <PublicDashboard
+              locale={locale}
+              copy={copy}
+              range={publicRange}
+              onOverallAvailabilityChange={setOverallAvailability}
+              onMetaChange={setPublicMeta}
+            />
+          )}
       </main>
     </div>
   );

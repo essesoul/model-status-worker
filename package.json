@@ -6,7 +6,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "node ./ensure-dev-vars.mjs && npm run build:web && wrangler dev -c wrangler.template.jsonc --local",
+    "dev": "node ./ensure-dev-vars.mjs && npm run build:web && node ./dev-local.mjs",
+    "dev:raw": "node ./ensure-dev-vars.mjs && npm run build:web && wrangler dev -c wrangler.template.jsonc --local",
     "build": "npm run build:web && npm run build:worker",
     "build:web": "tsc --noEmit -p tsconfig.web.json && vite build",
     "build:worker": "wrangler deploy -c wrangler.template.jsonc --dry-run --outdir worker-dist --name model-status-worker-dry-run",

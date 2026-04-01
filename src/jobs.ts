@@ -37,6 +37,7 @@ type ProbeCycleResult = {
 };
 
 type ProbeReporter = (event: ProbeStreamEvent) => Promise<void> | void;
+let dueJobsRun: Promise<void> | null = null;
 
 function truncateText(value: string | undefined, maxLength = 4000): string | undefined {
   if (!value) {
@@ -650,16 +651,54 @@ export async function probeAllModels(db: D1Database, reporter?: ProbeReporter): 
 }
 
 export async function runDueJobs(db: D1Database): Promise<void> {
-  await ensureBootstrap(db);
-  let settings = await getRuntimeSettings(db);
-  const nowMs = Date.now();
-
-  if (shouldRun(settings.lastCatalogSyncAt, settings.catalogSyncIntervalMs, nowMs)) {
-    await syncModelCatalog(db);
-    settings = await getRuntimeSettings(db);
+  if (dueJobsRun) {
+    console.info("Scheduled jobs are already running; skipping overlapping trigger.");
+    return dueJobsRun;
   }
 
-  if (shouldRun(settings.lastProbeAt, settings.probeIntervalMs, nowMs)) {
-    await probeAllModels(db);
+  dueJobsRun = (async () => {
+    await ensureBootstrap(db);
+    let settings = await getRuntimeSettings(db);
+    const nowMs = Date.now();
+    const shouldSyncCatalog = shouldRun(settings.lastCatalogSyncAt, settings.catalogSyncIntervalMs, nowMs);
+    const shouldProbeModels = shouldRun(settings.lastProbeAt, settings.probeIntervalMs, nowMs);
+
+    console.info("Scheduled job evaluation", {
+      now: new Date(nowMs).toISOString(),
+      lastCatalogSyncAt: settings.lastCatalogSyncAt,
+      catalogSyncIntervalMs: settings.catalogSyncIntervalMs,
+      shouldSyncCatalog,
+      lastProbeAt: settings.lastProbeAt,
+      probeIntervalMs: settings.probeIntervalMs,
+      shouldProbeModels,
+    });
+
+    if (shouldSyncCatalog) {
+      const syncResult = await syncModelCatalog(db);
+      console.info("Scheduled catalog sync completed", {
+        syncedAt: syncResult.syncedAt,
+        totalFetched: syncResult.totalFetched,
+        upserted: syncResult.upserted,
+        warnings: syncResult.errors.length,
+      });
+      settings = await getRuntimeSettings(db);
+    }
+
+    if (shouldProbeModels) {
+      const probeResult = await probeAllModels(db);
+      console.info("Scheduled probe cycle completed", {
+        startedAt: probeResult.startedAt,
+        finishedAt: probeResult.finishedAt,
+        total: probeResult.total,
+        succeeded: probeResult.succeeded,
+        failed: probeResult.failed,
+      });
+    }
+  })();
+
+  try {
+    await dueJobsRun;
+  } finally {
+    dueJobsRun = null;
   }
 }

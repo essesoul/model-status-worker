@@ -386,7 +386,17 @@ app.onError((error, c) => {
 
 export default {
   fetch: app.fetch,
-  scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
-    ctx.waitUntil(runDueJobs(env.DB));
+  scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+    console.info("Scheduled event received", {
+      cron: event.cron,
+      scheduledTime: new Date(event.scheduledTime).toISOString(),
+    });
+
+    ctx.waitUntil(
+      runDueJobs(env.DB).catch((error) => {
+        console.error("Scheduled jobs failed", error);
+        throw error;
+      }),
+    );
   },
 };
