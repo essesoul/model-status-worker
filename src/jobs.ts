@@ -516,6 +516,10 @@ async function runWithConcurrency<T>(
 }
 
 function shouldRun(lastRunAt: string | null, intervalMs: number, nowMs = Date.now()): boolean {
+  if (intervalMs <= 0) {
+    return false;
+  }
+
   if (!lastRunAt) {
     return true;
   }

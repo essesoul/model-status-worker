@@ -154,6 +154,18 @@ function clampNumber(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+function clampIntervalAllowZero(value: number, minimum: number, maximum: number): number {
+  if (!Number.isFinite(value)) {
+    return minimum;
+  }
+
+  if (value <= 0) {
+    return 0;
+  }
+
+  return clampNumber(value, minimum, maximum);
+}
+
 export function normalizeUrl(value: string): string {
   return value.trim().replace(/\/+$/u, "");
 }
@@ -552,7 +564,7 @@ function parseSettings(raw: Record<string, string>): AdminSettings {
     siteSubtitle: raw[SETTING_KEYS.siteSubtitle] ?? defaults.siteSubtitle,
     showSummaryCards: raw[SETTING_KEYS.showSummaryCards] !== "0",
     probeIntervalMs: clampNumber(Number(raw[SETTING_KEYS.probeIntervalMs] ?? defaults.probeIntervalMs), 60_000, 86_400_000),
-    catalogSyncIntervalMs: clampNumber(Number(raw[SETTING_KEYS.catalogSyncIntervalMs] ?? defaults.catalogSyncIntervalMs), 60_000, 86_400_000),
+    catalogSyncIntervalMs: clampIntervalAllowZero(Number(raw[SETTING_KEYS.catalogSyncIntervalMs] ?? defaults.catalogSyncIntervalMs), 60_000, 86_400_000),
     probeTimeoutMs: clampNumber(Number(raw[SETTING_KEYS.probeTimeoutMs] ?? defaults.probeTimeoutMs), 2_000, 120_000),
     probeConcurrency: clampNumber(Number(raw[SETTING_KEYS.probeConcurrency] ?? defaults.probeConcurrency), 1, 12),
     probeMaxTokens: clampNumber(Number(raw[SETTING_KEYS.probeMaxTokens] ?? defaults.probeMaxTokens), 1, 64),
@@ -664,7 +676,7 @@ export async function updateAdminSettings(
     siteSubtitle: typeof updates.siteSubtitle === "string" ? updates.siteSubtitle.trim() : currentSettings.siteSubtitle,
     showSummaryCards: typeof updates.showSummaryCards === "boolean" ? updates.showSummaryCards : currentSettings.showSummaryCards,
     probeIntervalMs: clampNumber(updates.probeIntervalMs ?? currentSettings.probeIntervalMs, 60_000, 86_400_000),
-    catalogSyncIntervalMs: clampNumber(updates.catalogSyncIntervalMs ?? currentSettings.catalogSyncIntervalMs, 60_000, 86_400_000),
+    catalogSyncIntervalMs: clampIntervalAllowZero(updates.catalogSyncIntervalMs ?? currentSettings.catalogSyncIntervalMs, 60_000, 86_400_000),
     probeTimeoutMs: clampNumber(updates.probeTimeoutMs ?? currentSettings.probeTimeoutMs, 2_000, 120_000),
     probeConcurrency: clampNumber(updates.probeConcurrency ?? currentSettings.probeConcurrency, 1, 12),
     probeMaxTokens: clampNumber(updates.probeMaxTokens ?? currentSettings.probeMaxTokens, 1, 64),
